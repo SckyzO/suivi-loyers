@@ -546,13 +546,18 @@ class Application(tk.Tk):
             if rep is None:   # Annuler / fermeture de la fenêtre : on n'écrase rien.
                 return
             preserver = rep
+        orphelins: list[str] = []
         try:
-            sortie = moteur.generer_workbook(cfg, xlsx, preserver=preserver)
+            sortie = moteur.generer_workbook(cfg, xlsx, preserver=preserver,
+                                             orphelins_out=orphelins)
         except Exception as e:  # noqa: BLE001 - retour utilisateur
             messagebox.showerror(APP_TITRE, f"Erreur pendant la génération :\n{e}")
             return
 
         msg = f"Fichier généré :\n{sortie}"
+        if orphelins:
+            msg += ("\n\n⚠ Saisies non réattribuées (locataire renommé ou supprimé) :\n"
+                    + ", ".join(orphelins))
         if self.var_save_config.get():
             try:
                 config_json = sortie.with_name(f"{sortie.stem}.config.json")

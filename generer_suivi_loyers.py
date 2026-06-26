@@ -28,8 +28,12 @@ from __future__ import annotations
 import sys
 import re
 import math
+import shutil
 import datetime as dt
 from pathlib import Path
+
+# Chaîne numérique simple (autorise la virgule décimale d'une config éditée à la main).
+_NUM_TXT = re.compile(r"^-?\d+(?:[.,]\d+)?$")
 
 import yaml
 from openpyxl import Workbook, load_workbook
@@ -114,7 +118,11 @@ def migrer_config(raw: dict) -> tuple[dict, list[str]]:
     avertis: list[str] = []
     cfg = dict(raw)
     ver = cfg.get("version")
-    if ver not in (None, CONFIG_VERSION):
+    if isinstance(ver, int) and ver > CONFIG_VERSION:
+        avertis.append(
+            f"Configuration créée par une version plus récente (v{ver}) que ce logiciel "
+            f"(v{CONFIG_VERSION}) : des options récentes peuvent être ignorées.")
+    elif ver not in (None, CONFIG_VERSION):
         avertis.append(f"Configuration version {ver} adaptée à la version {CONFIG_VERSION}.")
 
     cfg["bailleur"] = dict(cfg.get("bailleur") or {})
@@ -139,6 +147,11 @@ def migrer_config(raw: dict) -> tuple[dict, list[str]]:
             avertis.append("Un locataire au format inattendu a été ignoré.")
             continue
         loc = dict(loc)
+        # Coercition douce : « 100,5 » -> « 100.5 » pour les montants saisis à la main.
+        for champ in ("loyer_nu", "charges", "loyer", "loyer_total", "part_caf", "depot_garantie"):
+            v = loc.get(champ)
+            if isinstance(v, str) and _NUM_TXT.match(v.strip()):
+                loc[champ] = v.strip().replace(",", ".")
         loc.setdefault("type_bien", TYPES_BIEN[0])
         if not loc.get("identifiant"):
             loc["identifiant"] = loc.get("bien") or loc.get("nom") or ""
@@ -1227,7 +1240,8 @@ def recolter_irl(wb) -> dict:
 # Orchestration
 # --------------------------------------------------------------------------- #
 
-def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path:
+def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
+                     orphelins_out: list | None = None) -> Path:
     cfg = valider_config(cfg) if "annee_debut" not in cfg else cfg
     sortie = Path(sortie)
 
@@ -1245,6 +1259,8 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     if orphelins:
         print("Attention : saisies non réattribuées (locataire renommé ou supprimé) : "
               + ", ".join(orphelins), file=sys.stderr)
+        if orphelins_out is not None:
+            orphelins_out.extend(orphelins)
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -1260,6 +1276,12 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     construire_guide(wb, cfg)
 
     sortie.parent.mkdir(parents=True, exist_ok=True)
+    # Sauvegarde de secours avant d'écraser (récupération en cas de couac).
+    if sortie.is_file():
+        try:
+            shutil.copy2(sortie, sortie.with_name(sortie.stem + ".bak.xlsx"))
+        except OSError:
+            pass
     wb.save(sortie)
     return sortie
 

@@ -119,6 +119,28 @@ def main() -> int:
                              "locataires": [{"nom": "Z", "loyer": 100, "date_entree": "2025-01-01"}]})
     assert norm["modules"]["documents"] is True
 
+    # Bloc 1 : version plus récente, coercition virgule, .bak + orphelins.
+    _, avv = g.migrer_config({**bse, "version": 999,
+                              "locataires": [{"nom": "Z", "loyer": 100, "date_entree": "2025-01-01"}]})
+    assert any("récente" in a.lower() for a in avv), avv
+    g.valider_config({**bse, "locataires": [
+        {"nom": "V", "loyer": "100,5", "date_entree": "2025-01-01"}]})  # ne doit pas lever
+
+    fb = tmp / "bak.xlsx"
+    g.generer_workbook(g.valider_config({**bse, "locataires": [
+        {"nom": "Ana", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}), fb)
+    wbb = load_workbook(fb)
+    sa = wbb["M1 - Ana"]
+    re_, ea = ligne_entete(sa)
+    sa.cell(re_ + 1, ea["Part locataire reçue"]).value = 77
+    wbb.save(fb)
+    orph: list = []
+    g.generer_workbook(g.valider_config({**bse, "locataires": [
+        {"nom": "Bea", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}),
+        fb, orphelins_out=orph)
+    assert "Ana" in orph, orph
+    assert (tmp / "bak.bak.xlsx").is_file(), "sauvegarde .bak manquante"
+
     # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
     loc = wb["Locataires"]
     hl = {loc.cell(1, c).value: c for c in range(1, loc.max_column + 1)}

@@ -93,9 +93,9 @@ tolérant (ne lève pas pour un champ manquant), il convertit les anciens schém
 et affiche les avertissements. Toute évolution de schéma incrémente `CONFIG_VERSION` et ajoute
 sa transition ici.
 
-Différé (à approfondir plus tard) : sauvegarde `.bak` du fichier chargé, coercition stricte des
-types (montants/dates), et gestion d'une config issue d'une version **plus récente** que le
-binaire (avertir clairement plutôt que mal interpréter).
+Fait : sauvegarde `.bak` du classeur avant écrasement (`generer_workbook`), coercition douce des
+montants (virgule décimale) + validation stricte dans `valider_config` (montants/dates/unicité),
+et avertissement explicite si la config vient d'une version **plus récente** que le binaire.
 
 ## Modules (tous implémentés)
 
