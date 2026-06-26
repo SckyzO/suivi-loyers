@@ -44,18 +44,24 @@ plages nommées. Ne pas dupliquer les montants en dur.
   `recolter_saisies` puis réinjection dans `construire_suivi(saisies=...)`. La clé est
   `(nom, année, mois)`. Ne jamais écraser un fichier sans cette reprise quand `preserver=True`.
 
-## Tester (Docker uniquement)
+## Workflow de fin de modification
+
+Lancer **`make`** après chaque modification. Cela enchaîne : build de l'image, génération des
+classeurs d'exemple, `tests/smoke.py`, puis sync (code vers le dossier Windows, `.xlsx` vers
+`~/Downloads`). Tout passe par Docker, rien d'installé en local.
 
 ```bash
-docker compose build
-docker compose run --rm suivi configs/exemple.yaml   # bailleur complet
-docker compose run --rm suivi configs/minimal.yaml   # sans CAF ni loyer nu
+make            # build + gen + test + sync (workflow complet)
+make test       # smoke test seul (structure, modularité, préservation)
+make sync       # code -> dossier Windows, xlsx -> ~/Downloads
 ```
 
-Vérification de structure / préservation : surcharger l'entrypoint sur `python` et lancer un
-script de contrôle monté en volume (cf. l'historique de tests). Toujours valider :
-modularité (pas de colonne CAF en minimal), période d'activité, reprise des saisies après
-ajout d'un locataire.
+Le smoke test (`tests/smoke.py`) valide systématiquement : modularité (pas de colonne CAF en
+config minimale), période d'activité (rotation), et reprise des saisies après ajout d'un
+locataire. Tout fichier à visualiser doit finir dans `~/Downloads` (cf. mémoire projet).
+
+Un hook git `post-commit` relance `make sync-win` à chaque commit pour que `build.bat` parte
+toujours de la dernière version côté Windows.
 
 ## Reste à faire (phase 2)
 
