@@ -11,6 +11,7 @@ Distribution : packagée en .exe autonome via build.bat (PyInstaller).
 from __future__ import annotations
 
 import json
+import math
 import datetime as dt
 from pathlib import Path
 
@@ -35,7 +36,12 @@ OBSERVATIONS = moteur.OBSERVATIONS
 
 def _parse_nombre(txt: str) -> float:
     txt = (txt or "").strip().replace(",", ".").replace("€", "").replace(" ", "")
-    return float(txt) if txt else 0.0
+    if not txt:
+        return 0.0
+    val = float(txt)
+    if not math.isfinite(val):
+        raise ValueError("Montant invalide.")
+    return val
 
 
 # --------------------------------------------------------------------------- #

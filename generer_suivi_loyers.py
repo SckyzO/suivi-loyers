@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import sys
 import re
+import math
 import datetime as dt
 from pathlib import Path
 
@@ -185,7 +186,10 @@ def charger_config(chemin: Path) -> dict:
 def _num(loc: dict, *cles) -> float | None:
     for c in cles:
         if loc.get(c) is not None:
-            return float(loc[c])
+            v = float(loc[c])
+            if not math.isfinite(v):
+                raise ValueError(f"Montant invalide : {loc[c]!r}")
+            return v
     return None
 
 
@@ -270,6 +274,24 @@ def _fill_cf(couleur: str) -> PatternFill:
     return PatternFill(start_color=couleur, end_color=couleur, fill_type="solid")
 
 
+# Préfixes qu'Excel interprète comme une formule. openpyxl écrit une chaîne commençant
+# par « = » comme formule : on force le type texte pour neutraliser toute injection.
+_PREFIXES_FORMULE = ("=", "+", "-", "@")
+
+
+def _neutraliser(cell):
+    """Force le type texte si la valeur (utilisateur) ressemble à une formule."""
+    v = cell.value
+    if isinstance(v, str) and v[:1] in _PREFIXES_FORMULE:
+        cell.data_type = "s"
+    return cell
+
+
+def ecrire_texte(ws, row, column, valeur):
+    """Écrit une valeur d'origine utilisateur sans risque d'interprétation en formule."""
+    return _neutraliser(ws.cell(row, column, valeur))
+
+
 def style_cellule(cell, *, saisie=False, calc=False, fmt=None) -> None:
     if saisie:
         cell.fill = PatternFill("solid", fgColor=COUL_SAISIE)
@@ -325,10 +347,10 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
 
     for r, loc in enumerate(cfg["locataires"], start=2):
         a_sortie = _date(loc.get("date_sortie")) is not None
-        ws.cell(r, idx["locataire"], _identite(loc))
-        ws.cell(r, idx["identifiant"], loc.get("identifiant", ""))
-        ws.cell(r, idx["adresse"], loc.get("adresse", ""))
-        ws.cell(r, idx["type_bien"], loc.get("type_bien", TYPES_BIEN[0]))
+        ecrire_texte(ws, r, idx["locataire"], _identite(loc))
+        ecrire_texte(ws, r, idx["identifiant"], loc.get("identifiant", ""))
+        ecrire_texte(ws, r, idx["adresse"], loc.get("adresse", ""))
+        ecrire_texte(ws, r, idx["type_bien"], loc.get("type_bien", TYPES_BIEN[0]))
         if split:
             ws.cell(r, idx["loyer_nu"], _num(loc, "loyer_nu") or 0)
             ws.cell(r, idx["charges"], _num(loc, "charges") or 0)
@@ -350,7 +372,7 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
         if depot and a_sortie:
             ws.cell(r, idx["caution"], "Oui" if loc.get("caution_rendue") else "Non")
         if a_sortie and loc.get("observation"):
-            ws.cell(r, idx["observation"], loc.get("observation"))
+            ecrire_texte(ws, r, idx["observation"], loc.get("observation"))
 
     derniere = len(cfg["locataires"]) + 1
 
@@ -462,8 +484,8 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
         ws.sheet_view.showGridLines = False
         rloc = loc_index + 2  # ligne du locataire dans l'onglet Locataires
 
-        ws.cell(1, 2, ident_complet).font = Font(bold=True, size=14, color=COUL_ENTETE)
-        ws.cell(1, 4, identifiant).font = Font(bold=True, size=12)
+        ecrire_texte(ws, 1, 2, ident_complet).font = Font(bold=True, size=14, color=COUL_ENTETE)
+        ecrire_texte(ws, 1, 4, identifiant).font = Font(bold=True, size=12)
         ws.cell(2, 2, "Adresse :").font = Font(bold=True)
         ws.cell(2, 4, "=" + _ref("Locataires", f"${lettre_loc['adresse']}${rloc}"))
 
@@ -494,6 +516,7 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                     cell = ws.cell(r, col_de[key])
                     if key == "locataire":
                         cell.value = ident_complet
+                        _neutraliser(cell)
                     elif key == "annee":
                         cell.value = annee
                     elif key == "mois":
@@ -577,7 +600,7 @@ def construire_donnees(wb: Workbook, cfg: dict, feuilles: list[dict]) -> None:
     for info in feuilles:
         f, Lpl, rows = info["feuille"], info["cols"], info["rows"]
         for (annee, m), rpl in rows.items():
-            ws.cell(r, pos["locataire"], info["nom"])
+            ecrire_texte(ws, r, pos["locataire"], info["nom"])
             ws.cell(r, pos["annee"], annee)
             ws.cell(r, pos["mois"], MOIS[m - 1])
             for k in cols[3:]:
@@ -628,7 +651,7 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 
     for r, loc in enumerate(locs, start=2):
         nomc = f"${B['nom']}{r}"
-        ws.cell(r, 1, _identite(loc))
+        ecrire_texte(ws, r, 1, _identite(loc))
         ws.cell(r, pos["du"], f"=SUMIFS(Suivi_TotalDu,Suivi_Locataire,{nomc})")
         ws.cell(r, pos["recu"], f"=SUMIFS(Suivi_TotalRecu,Suivi_Locataire,{nomc})")
         if caf:
@@ -727,7 +750,7 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
         nom = _identite(loc)
         rloc = loc_index + 2
         pre = rev.get(str(nom), {})
-        ws.cell(r, 1, nom).border = BORDURE
+        ecrire_texte(ws, r, 1, nom).border = BORDURE
         cact = ws.cell(r, 2, "=" + _ref("Locataires", f"${lettre_loc[loyer_field]}${rloc}"))
         cact.number_format = FMT_EURO
         cact.border = BORDURE
@@ -809,7 +832,8 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     titre.alignment = Alignment(horizontal="center")
 
     # Sélecteurs.
-    ws["B4"], ws["C4"] = "Locataire :", _identite(cfg["locataires"][0])
+    ws["B4"] = "Locataire :"
+    ecrire_texte(ws, 4, 3, _identite(cfg["locataires"][0]))
     ws["B5"], ws["C5"] = "Mois :", MOIS[0]
     ws["D5"], ws["E5"] = "Année :", annees[0]
     for lab in ("B4", "B5", "D5"):
@@ -834,10 +858,10 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     b = cfg["bailleur"]
     ws["B7"] = "Le bailleur :"
     ws["B7"].font = Font(bold=True)
-    ws["B8"] = b.get("nom", "")
+    ecrire_texte(ws, 8, 2, b.get("nom", ""))
     for i, k in enumerate(("adresse", "tel", "email"), start=9):
         if b.get(k):
-            ws.cell(i, 2, str(b[k]))
+            ecrire_texte(ws, i, 2, str(b[k]))
 
     ws["D7"] = "Le locataire :"
     ws["D7"].font = Font(bold=True)
@@ -945,7 +969,7 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
         nom = _identite(loc)
         annees = sorted({a for (a, _) in _mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"])})
         for annee in annees:
-            ws.cell(r, 1, nom).border = BORDURE
+            ecrire_texte(ws, r, 1, nom).border = BORDURE
             ca = ws.cell(r, 2, annee)
             ca.number_format = "0"
             ca.border = BORDURE
@@ -992,7 +1016,7 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
     ws["B3"].font = Font(bold=True, size=12)
     coord = " · ".join(str(b[k]) for k in ("adresse", "tel", "email") if b.get(k))
     if coord:
-        ws["B4"] = coord
+        ecrire_texte(ws, 4, 2, coord)
 
     r = 6
     items = [

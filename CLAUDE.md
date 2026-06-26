@@ -59,6 +59,9 @@ Flux de données clé :
   Données, Bilan, documents, IRL, préservation). Le bail stocke `nom` + `prenom` séparés.
 - **Couleurs conditionnelles** : toujours via `_fill_cf` (start+end color = bgColor). Un fill
   conditionnel avec `fgColor` seul N'APPARAÎT PAS dans Excel (bug corrigé).
+- **Texte d'origine utilisateur** : l'écrire via `ecrire_texte` (anti-injection de formule :
+  openpyxl traite une chaîne commençant par `=` comme une formule). Ne jamais écrire un champ
+  saisi (nom, adresse, identifiant, observation, bailleur…) par un `ws.cell(...)` brut.
 - **Totaux annuels** dans les feuilles locataire : ligne « Total <année> » + ligne vide entre
   années. `rows_map` ne contient que les lignes de mois, donc `Données`/IRL restent corrects.
 

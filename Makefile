@@ -17,6 +17,9 @@ DOWNLOADS := $(HOME)/Downloads
 WIN_PROJECT := $(DOWNLOADS)/Suivi des loyers sur Excel
 EXEMPLES := exemples
 
+# Exécuter les conteneurs avec l'UID/GID courant : pas de fichiers créés en root.
+USERFLAG := --user $(shell id -u):$(shell id -g)
+
 # Fichiers source synchronisés côté Windows (pour builder l'.exe via build.bat).
 SRC := generer_suivi_loyers.py interface.py build.bat requirements.txt \
        Dockerfile docker-compose.yml Makefile README.md CLAUDE.md .gitignore
@@ -31,11 +34,11 @@ build: ## Construit l'image Docker
 
 gen: build ## Génère les classeurs d'exemple dans exemples/
 	@mkdir -p $(EXEMPLES)
-	$(COMPOSE) run --rm suivi configs/exemple.yaml $(EXEMPLES)
-	$(COMPOSE) run --rm suivi configs/minimal.yaml $(EXEMPLES)
+	$(COMPOSE) run --rm $(USERFLAG) suivi configs/exemple.yaml $(EXEMPLES)
+	$(COMPOSE) run --rm $(USERFLAG) suivi configs/minimal.yaml $(EXEMPLES)
 
 test: build ## Smoke test du moteur (structure, modularité, préservation)
-	docker run --rm --entrypoint python -e PYTHONPATH=/app -v "$(CURDIR):/app" $(IMAGE) tests/smoke.py
+	docker run --rm $(USERFLAG) --entrypoint python -e PYTHONPATH=/app -v "$(CURDIR):/app" $(IMAGE) tests/smoke.py
 
 sync: sync-win sync-exemples ## Synchronise source + exemples vers Windows
 
@@ -67,6 +70,5 @@ sync-exemples: ## Copie les classeurs d'exemple dans le dossier Windows (exemple
 	  echo "Dossier Windows absent, sync-exemples ignorée"; \
 	fi
 
-clean: ## Supprime les exemples générés (fichiers créés en root par Docker)
-	@docker run --rm --entrypoint rm -v "$(CURDIR)/$(EXEMPLES):/app/$(EXEMPLES)" $(IMAGE) -rf /app/$(EXEMPLES) 2>/dev/null || true
+clean: ## Supprime les exemples générés
 	@rm -rf $(EXEMPLES) && echo "$(EXEMPLES)/ nettoyé"

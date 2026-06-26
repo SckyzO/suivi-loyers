@@ -72,6 +72,23 @@ def main() -> int:
     assert g.base_fichier({"nom": "Durand", "sci": True, "sci_nom": "SCI Lilas"}) == "SCI Lilas Durand"
     assert g.base_fichier({"nom": "Durand", "sci": True, "sci_nom": ""}) == "Durand"
 
+    # Sécurité : un champ utilisateur commençant par « = » ne doit pas devenir une formule.
+    inj = {
+        "bailleur": {"nom": "=cmd|' /C calc'!A1"},
+        "periode": {"annee_debut": 2025, "annee_fin": 2025},
+        "modules": {"loyer_nu_charges": False, "caf": False, "depot_garantie": False,
+                    "documents": True},
+        "locataires": [{"nom": "=HYPERLINK(1)", "identifiant": "=2+2", "adresse": "=A1",
+                        "loyer": 100, "date_entree": "2025-01-01"}],
+    }
+    fi = tmp / "inj.xlsx"
+    g.generer_workbook(g.valider_config(inj), fi)
+    wbi = load_workbook(fi)
+    cli = wbi["Locataires"].cell(2, 1)
+    assert cli.data_type == "s" and cli.value == "=HYPERLINK(1)", (cli.data_type, cli.value)
+    cdoc = wbi["Quittance"].cell(4, 3)  # sélecteur locataire du document
+    assert cdoc.data_type == "s", cdoc.data_type
+
     # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
     loc = wb["Locataires"]
     hl = {loc.cell(1, c).value: c for c in range(1, loc.max_column + 1)}
