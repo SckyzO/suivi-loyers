@@ -68,6 +68,21 @@ COUL_TROP = "FFEB9C"
 COUL_PARTIEL = "FFC7CE"
 COUL_ATTENTE = "E7E6E6"
 
+# Couleurs d'onglet par rôle (cosmétique, aucun impact sur formules/plages).
+ONGLET_SYSTEME = "1F4E79"     # bleu : Guide, Locataires, Bilan, Tableau de bord, IRL, Régularisation
+ONGLET_LOCATAIRE = "548235"   # vert : feuilles de saisie locataire
+ONGLET_DOCUMENT = "C55A11"    # orange : Quittance, Avis d'échéance, Lettre de relance
+ONGLET_DONNEES = "808080"     # gris : Données (consolidée, masquée)
+
+# Échelle de titres unifiée et hauteur de la ligne d'en-tête (en-têtes sur 2 lignes).
+TITRE_H1 = 16
+TITRE_H2 = 12
+HAUTEUR_ENTETE = 30
+COUL_LIEN = "0563C1"          # bleu hyperlien
+
+# Valeurs officielles de l'IRL (série trimestrielle INSEE), à recopier dans l'onglet IRL.
+URL_IRL_INSEE = "https://www.insee.fr/fr/statistiques/serie/001515333"
+
 _THIN = Side(style="thin", color="BFBFBF")
 BORDURE = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 
@@ -243,6 +258,7 @@ def valider_config(raw: dict) -> dict:
         "annee_fin": annee_fin,
         "modules": modules,
         "locataires": locataires,
+        "demo": bool(raw.get("demo")),   # pré-remplissage de démonstration (exemples uniquement)
     }
 
 
@@ -296,6 +312,53 @@ def _prorata_suffixe(loc: dict, annee: int, mois: int) -> str:
     if jours <= 0 or jours >= nb:
         return ""
     return f"*{jours}/{nb}"
+
+
+def _prorata_facteur(loc: dict, annee: int, mois: int) -> float:
+    """Fraction du mois réellement occupée (1.0 si mois plein). Pendant du suffixe ci-dessus."""
+    de, ds = _date(loc.get("date_entree")), _date(loc.get("date_sortie"))
+    nb = calendar.monthrange(annee, mois)[1]
+    premier, dernier = 1, nb
+    if de and (de.year, de.month) == (annee, mois):
+        premier = de.day
+    if ds and (ds.year, ds.month) == (annee, mois):
+        dernier = ds.day
+    return max(0, dernier - premier + 1) / nb
+
+
+# Mois <= ce repère : paiement de démonstration saisi ; après : laissé vide (« À encaisser »).
+# Fixe (pas la date du jour) pour que les classeurs d'exemple soient reproductibles.
+DEMO_CUTOFF = (2026, 3)
+
+
+def _saisies_demo(cfg: dict) -> dict:
+    """Saisies de démonstration pour les exemples : loyers reçus jusqu'à DEMO_CUTOFF,
+    soldés pour tous, avec un impayé thématique en fin de bail (observation « impayé »).
+    Déterministe. Format identique à recolter_saisies (clé (identité, année, mois))."""
+    split, _csep, _mode = _flags_charges(cfg)
+    caf = cfg["modules"]["caf"]
+    saisies: dict = {}
+    for loc in cfg["locataires"]:
+        ident = _identite(loc)
+        if split:
+            base = (_num(loc, "loyer_nu") or 0) + (_num(loc, "charges") or 0)
+        else:
+            base = _num(loc, "loyer", "loyer_total", "loyer_nu") or 0
+        part_caf = (_num(loc, "part_caf") or 0) if caf else 0
+        mois = [am for am in _mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"])
+                if am <= DEMO_CUTOFF]
+        impaye = "impayé" in str(loc.get("observation") or "").lower()
+        fin_impaye = set(mois[-2:]) if impaye else set()
+        for (annee, m) in mois:
+            du_total = round(base * _prorata_facteur(loc, annee, m), 2)
+            caf_recu = round(part_caf, 2)            # la CAF n'est pas proratisée
+            loc_du = max(0.0, round(du_total - caf_recu, 2))
+            loc_recu = round(loc_du * 0.4, 2) if (annee, m) in fin_impaye else loc_du
+            entree = {"loc_recu": loc_recu, "loc_date": dt.date(annee, m, 5)}
+            if caf and caf_recu:
+                entree.update(caf_recu=caf_recu, caf_date=dt.date(annee, m, 5))
+            saisies[(ident, int(annee), MOIS[m - 1])] = entree
+    return saisies
 
 
 def _slug(nom: str) -> str:
@@ -356,6 +419,17 @@ def style_entete(cell) -> None:
     cell.border = BORDURE
 
 
+def style_titre(cell, niveau: int = TITRE_H1):
+    """Titre d'onglet (TITRE_H1) ou de section (TITRE_H2), couleur d'identité."""
+    cell.font = Font(bold=True, size=niveau, color=COUL_ENTETE)
+    return cell
+
+
+def regler_hauteur_entete(ws, row: int = 1) -> None:
+    """Hauteur de charte pour la ligne d'en-tête (en-têtes sur 2 lignes lisibles)."""
+    ws.row_dimensions[row].height = HAUTEUR_ENTETE
+
+
 def _fill_cf(couleur: str) -> PatternFill:
     """Remplissage pour la mise en forme conditionnelle.
 
@@ -381,6 +455,14 @@ def _neutraliser(cell):
 def ecrire_texte(ws, row, column, valeur):
     """Écrit une valeur d'origine utilisateur sans risque d'interprétation en formule."""
     return _neutraliser(ws.cell(row, column, valeur))
+
+
+def ecrire_lien(cell, texte: str, url: str):
+    """Cellule hyperlien (texte cliquable, style lien)."""
+    cell.value = texte
+    cell.hyperlink = url
+    cell.font = Font(color=COUL_LIEN, underline="single")
+    return cell
 
 
 def _formule_liste(valeurs) -> str:
@@ -414,6 +496,8 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     caf, depot = mod["caf"], mod["depot_garantie"]
 
     ws = wb.create_sheet("Locataires")
+    ws.sheet_view.showGridLines = False
+    ws.sheet_properties.tabColor = ONGLET_SYSTEME
 
     # Colonne 1 = identité (clé pour RECHERCHEV / listes). Type de bien APRÈS l'adresse.
     cols: list[tuple[str, str]] = [
@@ -440,6 +524,7 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
 
     for i, (_, titre) in enumerate(cols, 1):
         style_entete(ws.cell(row=1, column=i, value=titre))
+    regler_hauteur_entete(ws, 1)
 
     largeurs = {"locataire": 22, "type_bien": 14, "identifiant": 20, "adresse": 28,
                 "loyer_nu": 13, "charges": 13, "loyer_total": 14, "part_caf": 16,
@@ -589,10 +674,11 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
         feuille = _nom_feuille(base, pris)
         ws = wb.create_sheet(feuille)
         ws.sheet_view.showGridLines = False
+        ws.sheet_properties.tabColor = ONGLET_LOCATAIRE
         rloc = loc_index + 2  # ligne du locataire dans l'onglet Locataires
 
-        ecrire_texte(ws, 1, 2, ident_complet).font = Font(bold=True, size=14, color=COUL_ENTETE)
-        ecrire_texte(ws, 1, 4, identifiant).font = Font(bold=True, size=12)
+        style_titre(ecrire_texte(ws, 1, 2, ident_complet))
+        ecrire_texte(ws, 1, 4, identifiant).font = Font(bold=True, size=TITRE_H2)
         ws.cell(2, 2, "Adresse :").font = Font(bold=True)
         ws.cell(2, 4, "=" + _ref("Locataires", f"${lettre_loc['adresse']}${rloc}"))
 
@@ -602,6 +688,7 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
             ws.column_dimensions[get_column_letter(i)].width = c["w"]
             if c.get("cache"):
                 ws.column_dimensions[get_column_letter(i)].hidden = True
+        regler_hauteur_entete(ws, PL_LIGNE_ENTETE)
 
         def refloc(field: str) -> str:
             return "=" + _ref("Locataires", f"${lettre_loc[field]}${rloc}")
@@ -706,6 +793,7 @@ def construire_donnees(wb: Workbook, cfg: dict, feuilles: list[dict]) -> None:
 
     ws = wb.create_sheet("Données")
     ws.sheet_state = "hidden"
+    ws.sheet_properties.tabColor = ONGLET_DONNEES
     for i, k in enumerate(cols, 1):
         ws.cell(1, i, k)
 
@@ -748,6 +836,8 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
     caf = cfg["modules"]["caf"]
     locs = cfg["locataires"]
     ws = wb.create_sheet("Bilan")
+    ws.sheet_view.showGridLines = False
+    ws.sheet_properties.tabColor = ONGLET_SYSTEME
 
     cols = [("Locataire", 24), ("Total dû", 14), ("Total reçu", 14)]
     if caf:
@@ -757,6 +847,7 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
     for i, (titre, w) in enumerate(cols, 1):
         style_entete(ws.cell(1, i, titre))
         ws.column_dimensions[get_column_letter(i)].width = w
+    regler_hauteur_entete(ws, 1)
 
     keys = ["nom", "du", "recu"] + (["caf", "loc"] if caf else []) + ["solde", "taux"]
     B = {k: get_column_letter(i) for i, k in enumerate(keys, 1)}
@@ -814,17 +905,19 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
 
     ws = wb.create_sheet("Révision IRL")
     ws.sheet_view.showGridLines = False
+    ws.sheet_properties.tabColor = ONGLET_SYSTEME
     for col, w in (("A", 24), ("B", 16), ("C", 16), ("D", 16), ("E", 14), ("F", 14),
                    ("G", 16), ("H", 14), ("I", 12)):
         ws.column_dimensions[col].width = w
 
-    ws.cell(1, 1, "RÉVISION DU LOYER (IRL)").font = Font(bold=True, size=16, color=COUL_ENTETE)
+    style_titre(ws.cell(1, 1, "RÉVISION DU LOYER (IRL)"))
+    ecrire_lien(ws.cell(2, 1), "→ Valeurs officielles de l'IRL (série INSEE)", URL_IRL_INSEE)
 
     # --- Section 1 : indices IRL (saisie) ---
-    ws.cell(3, 1, "Indices IRL publiés (INSEE), à saisir").font = Font(
-        bold=True, size=12, color=COUL_ENTETE)
+    style_titre(ws.cell(3, 1, "Indices IRL publiés (INSEE), à saisir"), TITRE_H2)
     for i, t in enumerate(("Année", "Trimestre", "Valeur IRL"), 1):
         style_entete(ws.cell(4, i, t))
+    regler_hauteur_entete(ws, 4)
 
     idx_saisis = saisies_irl.get("indices", {})
     r = 5
@@ -848,13 +941,13 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
 
     # --- Section 2 : calcul de révision par locataire ---
     rs = fin_idx + 3
-    ws.cell(rs - 1, 1, "Calcul de révision par locataire").font = Font(
-        bold=True, size=12, color=COUL_ENTETE)
+    style_titre(ws.cell(rs - 1, 1, "Calcul de révision par locataire"), TITRE_H2)
     entetes = ["Locataire", "Loyer actuel (€)", "Trimestre réf.", "Année révision",
                "IRL année N", "IRL année N-1", "Nouveau loyer (€)", "Variation (€)",
                "Variation (%)"]
     for i, t in enumerate(entetes, 1):
         style_entete(ws.cell(rs, i, t))
+    regler_hauteur_entete(ws, rs)
 
     rev = saisies_irl.get("revisions", {})
     annee_def = annees[1] if len(annees) > 1 else annees[0]
@@ -919,7 +1012,8 @@ def construire_tableau_bord(wb: Workbook, cfg: dict) -> None:
 
     ws = wb.create_sheet("Tableau de bord")
     ws.sheet_view.showGridLines = False
-    ws.cell(1, 1, "TABLEAU DE BORD").font = Font(bold=True, size=16, color=COUL_ENTETE)
+    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    style_titre(ws.cell(1, 1, "TABLEAU DE BORD"))
 
     cats = Reference(bilan, min_col=pos["nom"], min_row=2, max_row=fin)
 
@@ -989,6 +1083,7 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
 
     ws = wb.create_sheet(spec["feuille"])
     ws.sheet_view.showGridLines = False
+    ws.sheet_properties.tabColor = ONGLET_DOCUMENT
     for col, w in (("A", 3), ("B", 26), ("C", 26), ("D", 16), ("E", 16)):
         ws.column_dimensions[col].width = w
 
@@ -1126,11 +1221,14 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
         return
 
     ws = wb.create_sheet("Régularisation charges")
+    ws.sheet_view.showGridLines = False
+    ws.sheet_properties.tabColor = ONGLET_SYSTEME
     titres = [("Locataire", 24), ("Année", 10), ("Provisions appelées (€)", 20),
               ("Charges réelles (€)", 18), ("Solde (€)", 14), ("Sens", 28)]
     for i, (t, w) in enumerate(titres, 1):
         style_entete(ws.cell(1, i, t))
         ws.column_dimensions[get_column_letter(i)].width = w
+    regler_hauteur_entete(ws, 1)
 
     r = 2
     for loc in cfg["locataires"]:
@@ -1177,67 +1275,120 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
 def construire_guide(wb: Workbook, cfg: dict) -> None:
     ws = wb.create_sheet("Guide", 0)
     ws.sheet_view.showGridLines = False
-    ws.column_dimensions["A"].width = 4
-    ws.column_dimensions["B"].width = 36
-    ws.column_dimensions["C"].width = 64
+    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions["B"].width = 16
+    ws.column_dimensions["C"].width = 86
 
+    blanc_centre = Alignment(horizontal="left", vertical="center")
+    texte_wrap = Alignment(wrap_text=True, vertical="center")
+
+    def fusion(row, valeur=None):
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=3)
+        return ws.cell(row, 2, valeur)
+
+    def section(row, titre):
+        """Barre de section : titre blanc sur bandeau bleu (cohérent avec l'en-tête)."""
+        c = fusion(row, titre)
+        c.font = Font(bold=True, size=TITRE_H2, color=COUL_ENTETE_TXT)
+        c.fill = PatternFill("solid", fgColor=COUL_ENTETE)
+        c.alignment = blanc_centre
+        ws.row_dimensions[row].height = 22
+        return row + 1
+
+    def pastille(row, etiquette, couleur, desc, *, texte_blanc=False):
+        """Ligne de légende : pastille colorée en B + description en C."""
+        chip = ws.cell(row, 2, etiquette)
+        chip.fill = PatternFill("solid", fgColor=couleur)
+        chip.alignment = Alignment(horizontal="center", vertical="center")
+        chip.border = BORDURE
+        if texte_blanc:
+            chip.font = Font(bold=True, color=COUL_ENTETE_TXT)
+        d = ws.cell(row, 3, desc)
+        d.alignment = texte_wrap
+        return row + 1
+
+    # --- Bandeau d'en-tête (bailleur) ---
     b = cfg["bailleur"]
-    ws["B2"] = "Suivi des loyers"
-    ws["B2"].font = Font(bold=True, size=18, color=COUL_ENTETE)
-    ws["B3"] = f"Bailleur : {b.get('nom', '')}"
-    ws["B3"].font = Font(bold=True, size=12)
     coord = " · ".join(str(b[k]) for k in ("adresse", "tel", "email") if b.get(k))
+    for rr in range(1, 4):
+        for cc in range(1, 4):
+            ws.cell(rr, cc).fill = PatternFill("solid", fgColor=COUL_ENTETE)
+    titre = fusion(1, "Suivi des loyers")
+    titre.font = Font(bold=True, size=20, color=COUL_ENTETE_TXT)
+    titre.alignment = blanc_centre
+    ws.row_dimensions[1].height = 30
+    sous = fusion(2, f"Bailleur : {b.get('nom', '')}")
+    sous.font = Font(bold=True, size=TITRE_H2, color=COUL_ENTETE_TXT)
+    sous.alignment = blanc_centre
+    ws.row_dimensions[2].height = 18
+    cco = fusion(3)
+    cco.alignment = blanc_centre
     if coord:
-        ecrire_texte(ws, 4, 2, coord)
+        _neutraliser(ws.cell(3, 2, coord))
+    cco.font = Font(italic=True, color=COUL_ENTETE_TXT)
+    ws.row_dimensions[3].height = 16
 
-    r = 6
-    items = [
-        ("1.", "Onglet « Locataires » : vérifiez les biens (type, n° / nom, adresse), les "
-               "loyers de référence et les dates d'entrée / sortie. Les mois d'entrée et de "
-               "sortie partiels sont calculés au prorata des jours."),
-        ("2.", "Une feuille par locataire : chaque mois, saisissez les montants REÇUS dans les "
-               "cellules jaunes (CAF reçue, part locataire reçue, dates)."),
-        ("3.", "Totaux, écarts et statuts se calculent automatiquement (cellules bleutées)."),
-        ("4.", "Onglet « Bilan » : synthèse par locataire."),
-        ("5.", "Documents à imprimer : choisissez le locataire et la période dans les listes "
-               "déroulantes ; le document se remplit seul."),
+    # --- Comment ça marche (stepper) ---
+    r = section(5, "Comment ça marche")
+    etapes = [
+        "Onglet « Locataires » : vérifiez les biens (type, n° / nom, adresse), les loyers de "
+        "référence et les dates d'entrée / sortie. Les mois d'entrée et de sortie partiels sont "
+        "calculés au prorata des jours.",
+        "Une feuille par locataire : chaque mois, saisissez les montants REÇUS dans les cellules "
+        "jaunes (CAF reçue, part locataire reçue, dates).",
+        "Totaux, écarts et statuts se calculent automatiquement (cellules bleutées, à ne pas "
+        "modifier).",
+        "Onglet « Bilan » : synthèse par locataire (total dû, reçu, solde, taux de recouvrement).",
     ]
     if cfg["modules"].get("tableau_bord", True):
-        items.append(
-            (f"{len(items) + 1}.",
-             "Onglet « Tableau de bord » : graphiques (dû vs reçu, taux de recouvrement)."))
+        etapes.append("Onglet « Tableau de bord » (2e onglet) : graphiques dû vs reçu et taux "
+                      "de recouvrement, mis à jour automatiquement.")
+    if cfg["modules"].get("documents"):
+        etapes.append("Documents à imprimer (Quittance, Avis d'échéance, Lettre de relance) : "
+                      "choisissez le locataire et la période dans les listes déroulantes ; le "
+                      "document se remplit seul.")
     if cfg["modules"].get("regularisation_charges") and _flags_charges(cfg)[0]:
-        items.append(
-            (f"{len(items) + 1}.",
-             "Onglet « Régularisation charges » : saisissez les charges réelles annuelles "
-             "(pré-remplies en mode charges comprises) ; le solde par locataire se calcule seul."))
+        etapes.append("Onglet « Régularisation charges » : saisissez les charges réelles "
+                      "annuelles (pré-remplies en mode charges comprises) ; le solde par "
+                      "locataire se calcule seul.")
     if cfg["modules"].get("irl"):
-        items.append(
-            (f"{len(items) + 1}.",
-             "Onglet « Révision IRL » : saisissez les indices IRL publiés ; le nouveau loyer "
-             "par locataire (après révision) se calcule seul."))
-    ws.cell(r, 2, "Mode d'emploi").font = Font(bold=True, size=13, color=COUL_ENTETE)
-    r += 1
-    for a, t in items:
-        ws.cell(r, 2, a).font = Font(bold=True)
-        ws.cell(r, 3, t)
+        etapes.append("Onglet « Révision IRL » : saisissez les indices IRL publiés ; le nouveau "
+                      "loyer après révision se calcule seul (lien officiel ci-dessous).")
+    for i, texte in enumerate(etapes, 1):
+        pastille(r, str(i), ONGLET_SYSTEME, texte, texte_blanc=True)
+        ws.row_dimensions[r].height = 30
         r += 1
     r += 1
 
-    ws.cell(r, 2, "Légende des statuts").font = Font(bold=True, size=13, color=COUL_ENTETE)
+    # --- Code couleur des onglets (rappelle la charte des onglets) ---
+    r = section(r, "Repère des onglets")
+    r = pastille(r, "", ONGLET_SYSTEME,
+                 "Bleu : pilotage et synthèse (Guide, Tableau de bord, Locataires, Bilan…).")
+    r = pastille(r, "", ONGLET_LOCATAIRE,
+                 "Vert : une feuille de saisie par locataire (c'est là qu'on remplit chaque mois).")
+    if cfg["modules"].get("documents"):
+        r = pastille(r, "", ONGLET_DOCUMENT,
+                     "Orange : documents à imprimer (quittance, avis d'échéance, relance).")
     r += 1
+
+    # --- Légende des statuts ---
+    r = section(r, "Légende des statuts")
     for nom, couleur, desc in (
         ("Soldé", COUL_SOLDE, "Le total reçu couvre le total dû."),
-        ("Trop-perçu", COUL_TROP, "Reçu supérieur au dû."),
+        ("Trop-perçu", COUL_TROP, "Reçu supérieur au dû (avance ou régularisation à prévoir)."),
         ("Partiel", COUL_PARTIEL, "Reçu inférieur au dû (impayé partiel)."),
         ("À encaisser", COUL_ATTENTE, "Aucun paiement saisi pour ce mois."),
     ):
-        cell = ws.cell(r, 2, nom)
-        cell.fill = PatternFill("solid", fgColor=couleur)
-        cell.alignment = Alignment(horizontal="center")
-        cell.border = BORDURE
-        ws.cell(r, 3, desc)
+        r = pastille(r, nom, couleur, desc)
+
+    # --- Liens utiles ---
+    if cfg["modules"].get("irl"):
         r += 1
+        r = section(r, "Liens utiles")
+        fusion(r)
+        ecrire_lien(ws.cell(r, 2), "Valeurs officielles de l'IRL (série trimestrielle INSEE)",
+                    URL_IRL_INSEE)
 
 
 # --------------------------------------------------------------------------- #
@@ -1364,6 +1515,10 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
         saisies_reg = recolter_regularisation(wbx)
         saisies_irl = recolter_irl(wbx)
 
+    # Exemples : pré-remplissage de démonstration si aucune saisie réelle à préserver.
+    if cfg.get("demo") and not saisies:
+        saisies = _saisies_demo(cfg)
+
     # m7 : signaler les saisies orphelines (locataire renommé/supprimé).
     identites = {_identite(loc) for loc in cfg["locataires"]}
     orphelins = sorted({nom for (nom, _, _) in saisies if nom not in identites})
@@ -1386,6 +1541,10 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     if cfg["modules"].get("documents"):
         construire_documents(wb, cfg, ref_loc)
     construire_guide(wb, cfg)
+
+    # Tableau de bord en 2e position, juste après le Guide (visible dès l'ouverture).
+    if "Tableau de bord" in wb.sheetnames:
+        wb.move_sheet("Tableau de bord", offset=1 - wb.sheetnames.index("Tableau de bord"))
 
     sortie.parent.mkdir(parents=True, exist_ok=True)
     # Sauvegarde de secours avant d'écraser (récupération en cas de couac).

@@ -1,6 +1,10 @@
 # Exemple « bailleur complet » (tous les modules + documents + régularisation + IRL).
 # Sert de base pour les tests ; l'interface graphique produit le même type de config.
 
+# Pré-remplit des loyers reçus de démonstration (statuts colorés, Bilan + tableau de bord
+# peuplés). Réservé aux exemples : l'interface ne produit jamais cette clé.
+demo: true
+
 bailleur:
   nom: "SCI Les Tilleuls"
   adresse: "12 rue des Lilas, 35000 Rennes"

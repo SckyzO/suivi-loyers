@@ -56,13 +56,38 @@ def main() -> int:
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
     # Onglet locataire nommé « identifiant - Nom » (évite les doublons même appartement).
-    attendus = ["Guide", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob", "Données", "Bilan",
-                "Tableau de bord", "Régularisation charges", "Révision IRL",
+    # Tableau de bord en 2e position (juste après le Guide).
+    attendus = ["Guide", "Tableau de bord", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob",
+                "Données", "Bilan", "Régularisation charges", "Révision IRL",
                 "Quittance", "Avis d'échéance", "Lettre de relance"]
     assert wb.sheetnames == attendus, wb.sheetnames
     assert wb["Données"].sheet_state == "hidden"
     assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
     assert wb["Avis d'échéance"]["B2"].value == "AVIS D'ÉCHÉANCE"
+
+    # Charte : couleur d'onglet par rôle (bleu système / vert locataire / orange document /
+    # gris Données) et gridlines masquées partout. Suit les constantes du moteur.
+    def couleur_onglet(nom):
+        tc = wb[nom].sheet_properties.tabColor
+        return tc.rgb[-6:] if tc and tc.rgb else None
+    role = {"Guide": g.ONGLET_SYSTEME, "Locataires": g.ONGLET_SYSTEME, "Bilan": g.ONGLET_SYSTEME,
+            "Tableau de bord": g.ONGLET_SYSTEME, "Régularisation charges": g.ONGLET_SYSTEME,
+            "Révision IRL": g.ONGLET_SYSTEME, "Données": g.ONGLET_DONNEES,
+            "Appt 1 - Alice": g.ONGLET_LOCATAIRE, "Appt 2 - Bob": g.ONGLET_LOCATAIRE,
+            "Quittance": g.ONGLET_DOCUMENT, "Avis d'échéance": g.ONGLET_DOCUMENT,
+            "Lettre de relance": g.ONGLET_DOCUMENT}
+    for nom, attendu in role.items():
+        assert couleur_onglet(nom) == attendu, (nom, couleur_onglet(nom), attendu)
+    for nom in wb.sheetnames:
+        if wb[nom].sheet_state == "visible":
+            assert wb[nom].sheet_view.showGridLines is False, nom
+
+    # Guide redessiné : bandeau de titre + lien INSEE en pied (module IRL actif).
+    assert wb["Guide"]["B1"].value == "Suivi des loyers", wb["Guide"]["B1"].value
+    irl = wb["Révision IRL"]
+    liens = [irl.cell(r, c).hyperlink.target for r in range(1, 5)
+             for c in range(1, 4) if irl.cell(r, c).hyperlink]
+    assert g.URL_IRL_INSEE in liens, liens
 
     # Identité = « Nom Prénom ».
     assert g._identite({"nom": "Martin", "prenom": "Sophie"}) == "Martin Sophie"
@@ -279,6 +304,32 @@ def main() -> int:
     g.generer_workbook(g.valider_config(legacy), f3)
     wb3 = load_workbook(f3)
     assert "Appt Z - Old" in wb3.sheetnames and "Quittance" in wb3.sheetnames, wb3.sheetnames
+
+    # 7) Pré-remplissage de démonstration : demo=true remplit les loyers reçus (mois <= cutoff),
+    #    laisse vide après, et reste inerte sans le drapeau.
+    demo_cfg = {"bailleur": {"nom": "Demo"}, "demo": True,
+                "periode": {"annee_debut": 2025, "annee_fin": 2026},
+                "modules": {"loyer_nu_charges": False, "caf": False, "depot_garantie": False,
+                            "documents": False},
+                "locataires": [{"nom": "Demo", "identifiant": "D1", "loyer": 600,
+                                "date_entree": "2025-01-01"}]}
+    fd = tmp / "demo.xlsx"
+    g.generer_workbook(g.valider_config(demo_cfg), fd, preserver=False)
+    wd = load_workbook(fd)["D1 - Demo"]
+    rd, ed = ligne_entete(wd)
+    recus = {}
+    for row in range(rd + 1, wd.max_row + 1):
+        an, mo = wd.cell(row, ed["Année"]).value, wd.cell(row, ed["Mois"]).value
+        if mo in g.MOIS:
+            recus[(an, mo)] = wd.cell(row, ed["Part locataire reçue"]).value
+    assert recus.get((2025, "Janvier")) == 600, recus.get((2025, "Janvier"))  # mois plein soldé
+    assert recus.get((2026, "Juin")) in (None, ""), recus.get((2026, "Juin"))  # après cutoff = vide
+
+    # Sans le drapeau demo : aucune saisie pré-remplie.
+    g.generer_workbook(g.valider_config({**demo_cfg, "demo": False}), fd, preserver=False)
+    wn = load_workbook(fd)["D1 - Demo"]
+    rn, en = ligne_entete(wn)
+    assert wn.cell(rn + 1, en["Part locataire reçue"]).value in (None, ""), "demo off devrait être vide"
 
     print("SMOKE OK")
     return 0

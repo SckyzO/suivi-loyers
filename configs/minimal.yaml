@@ -1,6 +1,8 @@
 # Exemple « bailleur minimal » : pas de CAF, pas de distinction loyer nu / charges,
 # pas de documents. Vérifie la modularité (colonnes et feuilles s'adaptent).
 
+demo: true   # pré-remplit des loyers reçus de démonstration (exemples uniquement)
+
 bailleur:
   nom: "M. Petit"
 
