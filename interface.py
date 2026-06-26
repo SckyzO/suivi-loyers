@@ -143,8 +143,10 @@ class DialogueLocataire(tk.Toplevel):
         if depot:
             libelle("Dépôt de garantie (€)"); entree("depot_garantie", num=True)
 
-        libelle("Date d'entrée"); self.date_entree = ChampDate(self, v.get("date_entree", ""))
-        self.date_entree.grid(row=ligne - 1, column=1, sticky="w", padx=8, pady=3)
+        libelle("Date d'entrée")
+        self.date_entree = ChampDate(self, v.get("date_entree", ""))
+        self.date_entree.grid(row=ligne, column=1, sticky="w", padx=8, pady=3)
+        ligne += 1
 
         # Bloc « locataire parti » : active date de sortie + caution + observation.
         self.var_parti = tk.BooleanVar(value=bool(v.get("date_sortie")))
@@ -153,8 +155,10 @@ class DialogueLocataire(tk.Toplevel):
                                                        sticky="w", padx=8, pady=(8, 2))
         ligne += 1
 
-        libelle("Date de sortie"); self.date_sortie = ChampDate(self, v.get("date_sortie", ""))
-        self.date_sortie.grid(row=ligne - 1, column=1, sticky="w", padx=8, pady=3)
+        libelle("Date de sortie")
+        self.date_sortie = ChampDate(self, v.get("date_sortie", ""))
+        self.date_sortie.grid(row=ligne, column=1, sticky="w", padx=8, pady=3)
+        ligne += 1
 
         self.var_caution = tk.BooleanVar(value=bool(v.get("caution_rendue")))
         self.chk_caution = ttk.Checkbutton(self, text="Caution rendue au locataire",
