@@ -71,7 +71,9 @@ COLS_SAISIE = ("caf_recu", "caf_date", "loc_recu", "loc_date")
 
 # Feuilles « système » (tout le reste = une feuille locataire).
 FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan", "Régularisation charges",
-                    "Quittance", "Avis d'échéance", "Lettre de relance"}
+                    "Révision IRL", "Quittance", "Avis d'échéance", "Lettre de relance"}
+
+TRIMESTRES = ["T1", "T2", "T3", "T4"]
 
 MODULES_DEFAUT = {
     "loyer_nu_charges": True,
@@ -590,6 +592,107 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Onglet Révision IRL (calculateur d'aide)
+# --------------------------------------------------------------------------- #
+
+def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) -> None:
+    if not cfg["modules"].get("irl"):
+        return
+    split = cfg["modules"]["loyer_nu_charges"]
+    lettre_loc = ref_loc["lettre"]
+    loyer_field = "loyer_nu" if split else "loyer_total"
+    annees = list(range(cfg["annee_debut"], cfg["annee_fin"] + 1))
+
+    ws = wb.create_sheet("Révision IRL")
+    ws.sheet_view.showGridLines = False
+    for col, w in (("A", 24), ("B", 16), ("C", 16), ("D", 16), ("E", 14), ("F", 14),
+                   ("G", 16), ("H", 14), ("I", 12)):
+        ws.column_dimensions[col].width = w
+
+    ws.cell(1, 1, "RÉVISION DU LOYER (IRL)").font = Font(bold=True, size=16, color=COUL_ENTETE)
+
+    # --- Section 1 : indices IRL (saisie) ---
+    ws.cell(3, 1, "Indices IRL publiés (INSEE), à saisir").font = Font(
+        bold=True, size=12, color=COUL_ENTETE)
+    for i, t in enumerate(("Année", "Trimestre", "Valeur IRL"), 1):
+        style_entete(ws.cell(4, i, t))
+
+    idx_saisis = saisies_irl.get("indices", {})
+    r = 5
+    for annee in annees:
+        for t in TRIMESTRES:
+            ca = ws.cell(r, 1, annee)
+            ca.number_format = "0"
+            ca.border = BORDURE
+            ws.cell(r, 2, t).border = BORDURE
+            cv = ws.cell(r, 3)
+            v = idx_saisis.get((int(annee), t))
+            if v not in (None, ""):
+                cv.value = v
+            style_cellule(cv, saisie=True, fmt="0.00")
+            r += 1
+    fin_idx = r - 1
+    sh = "'Révision IRL'"
+    wb.defined_names.add(DefinedName("Irl_Annee", attr_text=f"{sh}!$A$5:$A${fin_idx}"))
+    wb.defined_names.add(DefinedName("Irl_Trim", attr_text=f"{sh}!$B$5:$B${fin_idx}"))
+    wb.defined_names.add(DefinedName("Irl_Valeur", attr_text=f"{sh}!$C$5:$C${fin_idx}"))
+
+    # --- Section 2 : calcul de révision par locataire ---
+    rs = fin_idx + 3
+    ws.cell(rs - 1, 1, "Calcul de révision par locataire").font = Font(
+        bold=True, size=12, color=COUL_ENTETE)
+    entetes = ["Locataire", "Loyer actuel (€)", "Trimestre réf.", "Année révision",
+               "IRL année N", "IRL année N-1", "Nouveau loyer (€)", "Variation (€)",
+               "Variation (%)"]
+    for i, t in enumerate(entetes, 1):
+        style_entete(ws.cell(rs, i, t))
+
+    rev = saisies_irl.get("revisions", {})
+    annee_def = annees[1] if len(annees) > 1 else annees[0]
+    r = rs + 1
+    for loc_index, loc in enumerate(cfg["locataires"]):
+        nom = loc.get("nom")
+        rloc = loc_index + 2
+        pre = rev.get(str(nom), {})
+        ws.cell(r, 1, nom).border = BORDURE
+        cact = ws.cell(r, 2, "=" + _ref("Locataires", f"${lettre_loc[loyer_field]}${rloc}"))
+        cact.number_format = FMT_EURO
+        cact.border = BORDURE
+        ctr = ws.cell(r, 3, pre.get("trimestre", "T1"))
+        style_cellule(ctr, saisie=True)
+        can = ws.cell(r, 4, pre.get("annee", annee_def))
+        can.number_format = "0"
+        style_cellule(can, saisie=True)
+        cN = ws.cell(r, 5, f"=SUMIFS(Irl_Valeur,Irl_Annee,$D{r},Irl_Trim,$C{r})")
+        cN.number_format = "0.00"
+        cN.border = BORDURE
+        cN1 = ws.cell(r, 6, f"=SUMIFS(Irl_Valeur,Irl_Annee,$D{r}-1,Irl_Trim,$C{r})")
+        cN1.number_format = "0.00"
+        cN1.border = BORDURE
+        cnew = ws.cell(r, 7, f'=IFERROR($B{r}*E{r}/F{r},"")')
+        cnew.number_format = FMT_EURO
+        cnew.border = BORDURE
+        cvar = ws.cell(r, 8, f'=IFERROR(G{r}-$B{r},"")')
+        cvar.number_format = FMT_EURO
+        cvar.border = BORDURE
+        cpct = ws.cell(r, 9, f'=IFERROR(G{r}/$B{r}-1,"")')
+        cpct.number_format = FMT_PCT
+        cpct.border = BORDURE
+        r += 1
+    fin_rev = r - 1
+
+    if fin_rev >= rs + 1:
+        dvt = DataValidation(type="list", formula1='"%s"' % ",".join(TRIMESTRES), allow_blank=True)
+        dvt.add(f"C{rs + 1}:C{fin_rev}")
+        ws.add_data_validation(dvt)
+        dva = DataValidation(type="list", formula1='"%s"' % ",".join(str(a) for a in annees),
+                             allow_blank=True)
+        dva.add(f"D{rs + 1}:D{fin_rev}")
+        ws.add_data_validation(dva)
+    ws.freeze_panes = "A5"
+
+
+# --------------------------------------------------------------------------- #
 # Documents à imprimer (quittance, avis d'échéance, lettre de relance)
 # --------------------------------------------------------------------------- #
 
@@ -831,8 +934,14 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
     ]
     if cfg["modules"].get("regularisation_charges") and cfg["modules"]["loyer_nu_charges"]:
         items.append(
-            ("6.", "Onglet « Régularisation charges » : saisissez les charges réelles annuelles ; "
-                   "le solde par locataire (à rembourser ou à compléter) se calcule seul."))
+            (f"{len(items) + 1}.",
+             "Onglet « Régularisation charges » : saisissez les charges réelles annuelles ; "
+             "le solde par locataire (à rembourser ou à compléter) se calcule seul."))
+    if cfg["modules"].get("irl"):
+        items.append(
+            (f"{len(items) + 1}.",
+             "Onglet « Révision IRL » : saisissez les indices IRL publiés ; le nouveau loyer "
+             "par locataire (après révision) se calcule seul."))
     ws.cell(r, 2, "Mode d'emploi").font = Font(bold=True, size=13, color=COUL_ENTETE)
     r += 1
     for a, t in items:
@@ -931,6 +1040,51 @@ def recolter_regularisation(chemin_xlsx: Path) -> dict:
     return res
 
 
+def recolter_irl(chemin_xlsx: Path) -> dict:
+    """Saisies IRL d'un classeur existant : indices et choix de révision par locataire."""
+    chemin_xlsx = Path(chemin_xlsx)
+    if not chemin_xlsx.is_file():
+        return {}
+    wb = load_workbook(chemin_xlsx, data_only=False)
+    if "Révision IRL" not in wb.sheetnames:
+        return {}
+    ws = wb["Révision IRL"]
+    res: dict = {"indices": {}, "revisions": {}}
+
+    h_idx = h_rev = None
+    for r in range(1, ws.max_row + 1):
+        ligne = [ws.cell(r, c).value for c in range(1, 10)]
+        if "Valeur IRL" in ligne:
+            h_idx = r
+        if "Nouveau loyer (€)" in ligne:
+            h_rev = r
+
+    if h_idx:
+        r = h_idx + 1
+        while r <= ws.max_row:
+            an, tr, v = ws.cell(r, 1).value, ws.cell(r, 2).value, ws.cell(r, 3).value
+            if an in (None, "") or tr in (None, ""):
+                break
+            if v not in (None, ""):
+                res["indices"][(int(an), str(tr))] = v
+            r += 1
+
+    if h_rev:
+        for r in range(h_rev + 1, ws.max_row + 1):
+            nom = ws.cell(r, 1).value
+            if not nom:
+                continue
+            tr, an = ws.cell(r, 3).value, ws.cell(r, 4).value
+            d = {}
+            if tr not in (None, ""):
+                d["trimestre"] = str(tr)
+            if an not in (None, ""):
+                d["annee"] = int(an)
+            if d:
+                res["revisions"][str(nom)] = d
+    return res
+
+
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
@@ -940,6 +1094,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     sortie = Path(sortie)
     saisies = recolter_saisies(sortie) if preserver else {}
     saisies_reg = recolter_regularisation(sortie) if preserver else {}
+    saisies_irl = recolter_irl(sortie) if preserver else {}
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -949,6 +1104,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     construire_donnees(wb, cfg, feuilles)
     construire_bilan(wb, cfg)
     construire_regularisation(wb, cfg, saisies_reg)
+    construire_irl(wb, cfg, ref_loc, saisies_irl)
     if cfg["modules"].get("documents"):
         construire_documents(wb, cfg, ref_loc)
     construire_guide(wb, cfg)

@@ -65,6 +65,14 @@ appelées (calculées automatiquement) ; saisissez les **charges réelles** dans
 le **solde** s'affiche, avec le sens à appliquer (à rembourser au locataire ou complément à
 demander).
 
+### Réviser le loyer (IRL)
+
+Si l'option *Révision IRL* est activée, le classeur a un onglet **Révision IRL**. Saisissez les
+**indices IRL** publiés par l'INSEE (par année et trimestre) dans le tableau du haut. En bas,
+pour chaque locataire, choisissez le **trimestre de référence** et l'**année de révision** : le
+**nouveau loyer** et sa **variation** se calculent. C'est une aide au calcul ; reportez ensuite
+le nouveau loyer dans la fiche du locataire au moment où la révision s'applique.
+
 ### Changer de locataire plus tard
 
 Les locataires changent souvent : c'est prévu. Relancez `SuiviLoyers.exe`, cliquez sur

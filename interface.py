@@ -195,6 +195,7 @@ class Application(tk.Tk):
         self.var_depot = tk.BooleanVar(value=True)
         self.var_documents = tk.BooleanVar(value=True)
         self.var_regul = tk.BooleanVar(value=True)
+        self.var_irl = tk.BooleanVar(value=True)
         ttk.Checkbutton(mf, text="Séparer loyer nu / charges",
                         variable=self.var_split).pack(anchor="w", padx=8, pady=2)
         ttk.Checkbutton(mf, text="Suivre la part CAF (tiers payant)",
@@ -205,6 +206,8 @@ class Application(tk.Tk):
                         variable=self.var_documents).pack(anchor="w", padx=8, pady=2)
         ttk.Checkbutton(mf, text="Régularisation annuelle des charges",
                         variable=self.var_regul).pack(anchor="w", padx=8, pady=2)
+        ttk.Checkbutton(mf, text="Révision IRL (calcul du loyer révisé)",
+                        variable=self.var_irl).pack(anchor="w", padx=8, pady=2)
 
         lf = ttk.LabelFrame(self, text="Locataires", style="Section.TLabelframe")
         lf.pack(fill="both", expand=True, padx=14, pady=6)
@@ -240,7 +243,7 @@ class Application(tk.Tk):
     def _modules(self) -> dict:
         return {"loyer_nu_charges": self.var_split.get(), "caf": self.var_caf.get(),
                 "depot_garantie": self.var_depot.get(), "documents": self.var_documents.get(),
-                "regularisation_charges": self.var_regul.get()}
+                "regularisation_charges": self.var_regul.get(), "irl": self.var_irl.get()}
 
     def _adresses(self) -> list[str]:
         vues, ordre = set(), []
@@ -318,6 +321,7 @@ class Application(tk.Tk):
         self.var_depot.set(bool(m.get("depot_garantie", True)))
         self.var_documents.set(bool(m.get("documents", m.get("quittances", True))))
         self.var_regul.set(bool(m.get("regularisation_charges", True)))
+        self.var_irl.set(bool(m.get("irl", True)))
         self.locataires = list(cfg.get("locataires", []))
         self._rafraichir_tree()
 

@@ -87,12 +87,14 @@ Différé (à approfondir plus tard) : sauvegarde `.bak` du fichier chargé, coe
 types (montants/dates), et gestion d'une config issue d'une version **plus récente** que le
 binaire (avertir clairement plutôt que mal interpréter).
 
-## Reste à faire (phase 2)
+## Modules (tous implémentés)
 
-Seul `irl` reste inactif (défaut `false`). Il devra introduire une table loyer-par-année (le
-montant attendu suit aujourd'hui la valeur courante de la fiche locataire).
+`documents` (quittance + avis d'échéance + lettre de relance, builder générique
+`construire_document`), `regularisation_charges` (`construire_regularisation`), et `irl`
+(`construire_irl` : table d'indices IRL + calcul du loyer révisé par locataire). Les saisies
+propres à ces onglets sont préservées par `recolter_regularisation` et `recolter_irl`, en plus
+de `recolter_saisies` (mensuel).
 
-Implémentés : `documents` (quittance + avis d'échéance + lettre de relance, builder générique
-`construire_document`) et `regularisation_charges` (`construire_regularisation` : un onglet
-annuel par locataire, provisions `SUMIFS(Suivi_ChargesDu, …)` vs charges réelles saisies).
-Les charges réelles saisies sont préservées via `recolter_regularisation`.
+Limite assumée IRL : c'est un **calculateur d'aide**. Le loyer attendu du suivi suit toujours
+la fiche locataire courante ; l'intégration loyer-par-année (révision répercutée
+automatiquement mois par mois) est reportée à la passe design.

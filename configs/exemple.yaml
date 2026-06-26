@@ -17,6 +17,7 @@ modules:
   depot_garantie: true
   documents: true          # quittance + avis d'échéance + lettre de relance
   regularisation_charges: true  # onglet de régularisation annuelle des charges
+  irl: true                # onglet de révision IRL (calculateur)
 
 locataires:
   - nom: "Martin Sophie"

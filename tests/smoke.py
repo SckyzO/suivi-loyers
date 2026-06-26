@@ -16,7 +16,7 @@ CFG_COMPLET = {
     "bailleur": {"nom": "Smoke Complet"},
     "periode": {"annee_debut": 2024, "annee_fin": 2025},
     "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True,
-                "documents": True, "regularisation_charges": True},
+                "documents": True, "regularisation_charges": True, "irl": True},
     "locataires": [
         {"nom": "Alice", "type_bien": "Appartement", "identifiant": "Appt 1",
          "adresse": "1 rue A", "loyer_nu": 500, "charges": 50, "part_caf": 200,
@@ -53,7 +53,8 @@ def main() -> int:
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
     attendus = ["Guide", "Locataires", "Appt 1", "Appt 2", "Données", "Bilan",
-                "Régularisation charges", "Quittance", "Avis d'échéance", "Lettre de relance"]
+                "Régularisation charges", "Révision IRL",
+                "Quittance", "Avis d'échéance", "Lettre de relance"]
     assert wb.sheetnames == attendus, wb.sheetnames
     assert wb["Données"].sheet_state == "hidden"
     assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
@@ -127,6 +128,24 @@ def main() -> int:
             val = reg.cell(r, ent["Charges réelles (€)"]).value
             break
     assert val == 612, f"charge réelle non préservée: {val}"
+
+    # 5b) IRL : saisie d'un indice et d'un choix de révision, préservés après régénération.
+    wb = load_workbook(f1)
+    irl = wb["Révision IRL"]
+    # 1er indice (ligne 5, colonne C) et 1re révision locataire.
+    irl.cell(5, 3).value = 145.17                      # valeur IRL T1 année début
+    h_rev = next(r for r in range(1, irl.max_row + 1)
+                 if irl.cell(r, 7).value == "Nouveau loyer (€)")
+    irl.cell(h_rev + 1, 3).value = "T2"                # trimestre réf. 1er locataire
+    nom_irl = irl.cell(h_rev + 1, 1).value
+    wb.save(f1)
+    g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True)
+    irl = load_workbook(f1)["Révision IRL"]
+    assert irl.cell(5, 3).value == 145.17, irl.cell(5, 3).value
+    h_rev = next(r for r in range(1, irl.max_row + 1)
+                 if irl.cell(r, 7).value == "Nouveau loyer (€)")
+    assert irl.cell(h_rev + 1, 1).value == nom_irl
+    assert irl.cell(h_rev + 1, 3).value == "T2", irl.cell(h_rev + 1, 3).value
 
     # 6) Rétro-compatibilité : une « ancienne » config (champ bien, module quittances)
     #    se migre et génère sans erreur.
