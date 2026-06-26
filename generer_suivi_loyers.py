@@ -213,6 +213,16 @@ def _slug(nom: str) -> str:
     return s.strip("_") or "bailleur"
 
 
+def base_fichier(bailleur: dict) -> str:
+    """Base du nom de fichier : nom de la SCI (si renseigné) + nom du bailleur."""
+    nom = str(bailleur.get("nom") or "").strip()
+    prenom = str(bailleur.get("prenom") or "").strip()
+    perso = f"{nom} {prenom}".strip() if prenom else nom
+    if bailleur.get("sci") and str(bailleur.get("sci_nom") or "").strip():
+        return f"{bailleur['sci_nom']} {perso}".strip()
+    return perso or nom
+
+
 def _identite(loc: dict) -> str:
     """Identité d'un locataire (clé interne) = « Nom Prénom » (ou nom seul si pas de prénom)."""
     nom = str(loc.get("nom") or "").strip()
@@ -1179,7 +1189,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
 
 def generer(chemin_config: Path, dossier_sortie: Path) -> Path:
     cfg = charger_config(chemin_config)
-    sortie = Path(dossier_sortie) / f"Suivi_{_slug(cfg['bailleur']['nom'])}.xlsx"
+    sortie = Path(dossier_sortie) / f"Suivi_{_slug(base_fichier(cfg['bailleur']))}.xlsx"
     return generer_workbook(cfg, sortie)
 
 

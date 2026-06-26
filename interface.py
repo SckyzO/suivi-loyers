@@ -251,14 +251,29 @@ class Application(tk.Tk):
         bf = ttk.LabelFrame(self, text="Bailleur", style="Section.TLabelframe")
         bf.pack(fill="x", padx=14, pady=6)
         self.var_nom = tk.StringVar()
+        self.var_prenom = tk.StringVar()
+        self.var_sci = tk.BooleanVar(value=False)
+        self.var_sci_nom = tk.StringVar()
         self.var_adresse = tk.StringVar()
         self.var_tel = tk.StringVar()
         self.var_email = tk.StringVar()
-        for col, (lab, var) in enumerate([("Nom *", self.var_nom), ("Adresse", self.var_adresse),
-                                          ("Téléphone", self.var_tel), ("E-mail", self.var_email)]):
-            r, c = divmod(col, 2)
+
+        def champ(r, c, lab, var):
             ttk.Label(bf, text=lab).grid(row=r, column=c * 2, sticky="w", padx=8, pady=4)
-            ttk.Entry(bf, textvariable=var, width=34).grid(row=r, column=c * 2 + 1, padx=8, pady=4)
+            ttk.Entry(bf, textvariable=var, width=30).grid(row=r, column=c * 2 + 1, padx=8, pady=4)
+
+        champ(0, 0, "Nom *", self.var_nom)
+        champ(0, 1, "Prénom", self.var_prenom)
+        ttk.Checkbutton(bf, text="SCI", variable=self.var_sci, command=self._maj_sci).grid(
+            row=1, column=0, sticky="w", padx=8, pady=4)
+        self.ent_sci = ttk.Entry(bf, textvariable=self.var_sci_nom, width=30)
+        self.ent_sci.grid(row=1, column=1, padx=8, pady=4)
+        ttk.Label(bf, text="nom de la SCI", foreground="#666").grid(
+            row=1, column=2, sticky="w", padx=4)
+        champ(2, 0, "Adresse", self.var_adresse)
+        champ(2, 1, "Téléphone", self.var_tel)
+        champ(3, 0, "E-mail", self.var_email)
+        self._maj_sci()
 
         pm = ttk.Frame(self)
         pm.pack(fill="x", padx=14, pady=6)
@@ -326,6 +341,9 @@ class Application(tk.Tk):
 
     # ------------------------- gestion locataires ------------------------- #
 
+    def _maj_sci(self) -> None:
+        self.ent_sci.configure(state="normal" if self.var_sci.get() else "disabled")
+
     def _modules(self) -> dict:
         return {"loyer_nu_charges": self.var_split.get(), "caf": self.var_caf.get(),
                 "depot_garantie": self.var_depot.get(), "documents": self.var_documents.get(),
@@ -385,8 +403,10 @@ class Application(tk.Tk):
     def _config(self) -> dict:
         return {
             "version": moteur.CONFIG_VERSION,
-            "bailleur": {"nom": self.var_nom.get().strip(), "adresse": self.var_adresse.get(),
-                         "tel": self.var_tel.get(), "email": self.var_email.get()},
+            "bailleur": {"nom": self.var_nom.get().strip(), "prenom": self.var_prenom.get().strip(),
+                         "sci": self.var_sci.get(), "sci_nom": self.var_sci_nom.get().strip(),
+                         "adresse": self.var_adresse.get(), "tel": self.var_tel.get(),
+                         "email": self.var_email.get()},
             "periode": {"annee_debut": self.var_debut.get(), "annee_fin": self.var_fin.get()},
             "modules": self._modules(),
             "locataires": self.locataires,
@@ -395,6 +415,10 @@ class Application(tk.Tk):
     def _appliquer_config(self, cfg: dict) -> None:
         b = cfg.get("bailleur", {})
         self.var_nom.set(b.get("nom", ""))
+        self.var_prenom.set(b.get("prenom", ""))
+        self.var_sci.set(bool(b.get("sci", False)))
+        self.var_sci_nom.set(b.get("sci_nom", ""))
+        self._maj_sci()
         self.var_adresse.set(b.get("adresse", ""))
         self.var_tel.set(b.get("tel", ""))
         self.var_email.set(b.get("email", ""))
@@ -446,7 +470,7 @@ class Application(tk.Tk):
             return
         chemin = filedialog.asksaveasfilename(
             title="Enregistrer la configuration", defaultextension=".json",
-            initialfile=f"config_{moteur._slug(cfg['bailleur']['nom'])}.json",
+            initialfile=f"config_{moteur._slug(moteur.base_fichier(cfg['bailleur']))}.json",
             filetypes=[("Configuration JSON", "*.json")])
         if not chemin:
             return
@@ -466,7 +490,7 @@ class Application(tk.Tk):
             messagebox.showerror(APP_TITRE, str(e))
             return
 
-        slug = moteur._slug(cfg["bailleur"]["nom"])
+        slug = moteur._slug(moteur.base_fichier(cfg["bailleur"]))
         chemin = filedialog.asksaveasfilename(
             title="Enregistrer le classeur de suivi", defaultextension=".xlsx",
             initialfile=f"Suivi_{slug}.xlsx", filetypes=[("Classeur Excel", "*.xlsx")])

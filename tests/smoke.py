@@ -67,6 +67,11 @@ def main() -> int:
     assert g._identite({"nom": "Martin", "prenom": "Sophie"}) == "Martin Sophie"
     assert g._identite({"nom": "Old"}) == "Old"
 
+    # Nom de fichier : SCI prioritaire si renseignée.
+    assert g.base_fichier({"nom": "Durand", "prenom": "Paul"}) == "Durand Paul"
+    assert g.base_fichier({"nom": "Durand", "sci": True, "sci_nom": "SCI Lilas"}) == "SCI Lilas Durand"
+    assert g.base_fichier({"nom": "Durand", "sci": True, "sci_nom": ""}) == "Durand"
+
     # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
     loc = wb["Locataires"]
     hl = {loc.cell(1, c).value: c for c in range(1, loc.max_column + 1)}
