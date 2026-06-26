@@ -1,5 +1,5 @@
-# Exemple « bailleur minimal » : pas de CAF, pas de distinction loyer nu / charges.
-# Vérifie la modularité (colonnes et onglets s'adaptent).
+# Exemple « bailleur minimal » : pas de CAF, pas de distinction loyer nu / charges,
+# pas de documents. Vérifie la modularité (colonnes et feuilles s'adaptent).
 
 bailleur:
   nom: "M. Petit"
@@ -12,9 +12,12 @@ modules:
   loyer_nu_charges: false
   caf: false
   depot_garantie: false
+  documents: false
 
 locataires:
   - nom: "Lefevre Paul"
-    bien: "Maison - 3 impasse du Clos"
+    type_bien: "Maison"
+    identifiant: "Maison principale"
+    adresse: "3 impasse du Clos, 35000 Rennes"
     loyer: 750
     date_entree: 2025-01-01

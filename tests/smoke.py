@@ -1,7 +1,7 @@
-"""Smoke test du moteur, autonome (écrit dans un dossier temporaire, ne pollue pas sorties/).
+"""Smoke test du moteur, autonome (dossier temporaire, ne pollue pas sorties/).
 
-Vérifie : structure des onglets, colonnes pilotées par les modules (modularité), génération
-sur la période d'activité (rotation), et préservation des saisies lors d'une régénération.
+Couvre : architecture (feuille par locataire + Données masquée + documents), modularité,
+période d'activité (rotation), et préservation des saisies lors d'une régénération.
 """
 
 import sys
@@ -16,75 +16,95 @@ CFG_COMPLET = {
     "bailleur": {"nom": "Smoke Complet"},
     "periode": {"annee_debut": 2024, "annee_fin": 2025},
     "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True,
-                "quittances": True},
+                "documents": True},
     "locataires": [
-        {"nom": "A", "bien": "L1", "loyer_nu": 500, "charges": 50, "part_caf": 200,
+        {"nom": "Alice", "type_bien": "Appartement", "identifiant": "Appt 1",
+         "adresse": "1 rue A", "loyer_nu": 500, "charges": 50, "part_caf": 200,
          "depot_garantie": 500, "date_entree": "2024-01-01"},
-        {"nom": "B", "bien": "L2", "loyer_nu": 400, "charges": 40, "part_caf": 0,
-         "depot_garantie": 400, "date_entree": "2025-07-01"},  # entré en cours d'année
+        {"nom": "Bob", "type_bien": "Appartement", "identifiant": "Appt 2",
+         "adresse": "1 rue A", "loyer_nu": 400, "charges": 40, "part_caf": 0,
+         "depot_garantie": 400, "date_entree": "2025-07-01"},  # entré en cours de période
     ],
 }
 
 CFG_MINIMAL = {
     "bailleur": {"nom": "Smoke Minimal"},
     "periode": {"annee_debut": 2025, "annee_fin": 2025},
-    "modules": {"loyer_nu_charges": False, "caf": False, "depot_garantie": False},
-    "locataires": [{"nom": "C", "bien": "M", "loyer": 750, "date_entree": "2025-01-01"}],
+    "modules": {"loyer_nu_charges": False, "caf": False, "depot_garantie": False,
+                "documents": False},
+    "locataires": [{"nom": "Carl", "type_bien": "Maison", "identifiant": "Maison",
+                    "adresse": "2 rue B", "loyer": 750, "date_entree": "2025-01-01"}],
 }
 
 
-def entetes(ws):
-    return [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
-
-
-def colonnes_map(ws):
-    return {ws.cell(1, c).value: c for c in range(1, ws.max_column + 1)}
+def ligne_entete(ws):
+    for r in range(1, 12):
+        vals = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
+        if "Mois" in vals and "Année" in vals:
+            return r, {v: c for c, v in enumerate(vals, 1) if v}
+    raise AssertionError("en-tête introuvable")
 
 
 def main() -> int:
     tmp = Path(tempfile.mkdtemp())
 
-    # 1) Bailleur complet : structure + colonnes CAF/charges + période d'activité.
+    # 1) Bailleur complet : architecture attendue.
     f1 = tmp / "complet.xlsx"
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
-    ws = wb["Suivi"]
-    assert wb.sheetnames == ["Guide", "Locataires", "Suivi", "Bilan", "Quittance"], wb.sheetnames
+    attendus = ["Guide", "Locataires", "Appt 1", "Appt 2", "Données", "Bilan",
+                "Quittance", "Avis d'échéance", "Lettre de relance"]
+    assert wb.sheetnames == attendus, wb.sheetnames
+    assert wb["Données"].sheet_state == "hidden"
     assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
-    cols = entetes(ws)
-    assert "CAF reçue" in cols and "Charges dues" in cols, cols
-    cmap = colonnes_map(ws)
-    nb_b = sum(1 for r in range(2, ws.max_row + 1)
-               if ws.cell(r, cmap["Locataire"]).value == "B")
-    assert nb_b == 6, f"B devrait avoir 6 mois (07->12/2025), obtenu {nb_b}"
+    assert wb["Avis d'échéance"]["B2"].value == "AVIS D'ÉCHÉANCE"
 
-    # 2) Bailleur minimal : aucune colonne CAF, libellé « Loyer dû ».
+    # Feuille locataire : colonnes CAF présentes + titre/identifiant.
+    ws = wb["Appt 1"]
+    assert ws.cell(1, 2).value == "Alice"
+    assert ws.cell(1, 4).value == "Appt 1"
+    _, ent = ligne_entete(ws)
+    assert "CAF reçue" in ent and "Charges dues" in ent, list(ent)
+
+    # 2) Période d'activité : Bob entré 07/2025 -> 6 lignes (07->12/2025).
+    wsb = wb["Appt 2"]
+    rb, _ = ligne_entete(wsb)
+    nb_b = sum(1 for r in range(rb + 1, wsb.max_row + 1) if wsb.cell(r, 3).value)
+    assert nb_b == 6, f"Bob devrait avoir 6 mois, obtenu {nb_b}"
+
+    # 3) Bailleur minimal : pas de CAF, pas de documents.
     f2 = tmp / "minimal.xlsx"
     g.generer_workbook(g.valider_config(CFG_MINIMAL), f2)
     wb2 = load_workbook(f2)
-    cols2 = entetes(wb2["Suivi"])
-    assert not any("CAF" in (c or "") for c in cols2), cols2
-    assert "Loyer dû" in cols2, cols2
     assert "Quittance" not in wb2.sheetnames, wb2.sheetnames
+    assert "Maison" in wb2.sheetnames, wb2.sheetnames
+    _, ent2 = ligne_entete(wb2["Maison"])
+    assert not any("CAF" in (k or "") for k in ent2), list(ent2)
+    assert "Loyer dû" in ent2, list(ent2)
 
-    # 3) Préservation des saisies : on saisit, on régénère avec un locataire en plus.
+    # 4) Préservation : on saisit dans la feuille d'Alice, on régénère avec un locataire en plus.
     wb = load_workbook(f1)
-    ws = wb["Suivi"]
-    ent = colonnes_map(ws)
-    ws.cell(2, ent["Part locataire reçue"]).value = 333
-    cle = (ws.cell(2, ent["Locataire"]).value, ws.cell(2, ent["Année"]).value,
-           ws.cell(2, ent["Mois"]).value)
+    ws = wb["Appt 1"]
+    r_ent, ent = ligne_entete(ws)
+    r0 = r_ent + 1
+    ws.cell(r0, ent["Part locataire reçue"]).value = 333
+    cle = (ws.cell(r0, ent["Locataire"]).value, ws.cell(r0, ent["Année"]).value,
+           ws.cell(r0, ent["Mois"]).value)
     wb.save(f1)
 
     cfg2 = g.valider_config(CFG_COMPLET)
-    cfg2["locataires"].append({"nom": "D", "bien": "L3", "loyer_nu": 300, "charges": 20,
-                               "part_caf": 100, "depot_garantie": 300, "date_entree": "2025-01-01"})
+    cfg2["locataires"].append({"nom": "Dora", "type_bien": "Maison", "identifiant": "Villa",
+                               "adresse": "9 rue C", "loyer_nu": 300, "charges": 20,
+                               "part_caf": 100, "depot_garantie": 300,
+                               "date_entree": "2025-01-01"})
     g.generer_workbook(cfg2, f1, preserver=True)
 
-    ws = load_workbook(f1)["Suivi"]
-    ent = colonnes_map(ws)
+    wb = load_workbook(f1)
+    assert "Villa" in wb.sheetnames, wb.sheetnames
+    ws = wb["Appt 1"]
+    r_ent, ent = ligne_entete(ws)
     trouve = None
-    for r in range(2, ws.max_row + 1):
+    for r in range(r_ent + 1, ws.max_row + 1):
         if (ws.cell(r, ent["Locataire"]).value, ws.cell(r, ent["Année"]).value,
                 ws.cell(r, ent["Mois"]).value) == cle:
             trouve = ws.cell(r, ent["Part locataire reçue"]).value

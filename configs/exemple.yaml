@@ -1,4 +1,4 @@
-# Exemple de configuration « bailleur complet » (tous les modules de la phase 1).
+# Exemple « bailleur complet » (tous les modules de la phase 1 + documents).
 # Sert de base pour les tests ; l'interface graphique produit le même type de config.
 
 bailleur:
@@ -15,11 +15,13 @@ modules:
   loyer_nu_charges: true   # sépare loyer nu / provision charges
   caf: true                # colonnes part CAF (tiers payant)
   depot_garantie: true
-  quittances: true         # onglet quittance de loyer interactif
+  documents: true          # quittance + avis d'échéance + lettre de relance
 
 locataires:
   - nom: "Martin Sophie"
-    bien: "Appt A1 - 12 rue des Lilas"
+    type_bien: "Appartement"
+    identifiant: "Appt A1"
+    adresse: "12 rue des Lilas, 35000 Rennes"
     loyer_nu: 480
     charges: 50
     part_caf: 210
@@ -27,16 +29,20 @@ locataires:
     date_entree: 2024-01-01
 
   - nom: "Durand Karim"
-    bien: "Appt A2 - 12 rue des Lilas"
+    type_bien: "Appartement"
+    identifiant: "Appt A2"
+    adresse: "12 rue des Lilas, 35000 Rennes"
     loyer_nu: 520
     charges: 60
     part_caf: 0
     depot_garantie: 520
     date_entree: 2024-03-15
 
-  # Rotation : ce locataire remplace un départ dans le même logement en cours d'année.
+  # Rotation : nouveau locataire dans un autre logement en cours de période.
   - nom: "Nguyen Lina"
-    bien: "Studio B - 14 rue des Lilas"
+    type_bien: "Maison"
+    identifiant: "Maison du Clos"
+    adresse: "3 impasse du Clos, 35000 Rennes"
     loyer_nu: 390
     charges: 40
     part_caf: 180

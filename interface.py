@@ -21,6 +21,7 @@ import generer_suivi_loyers as moteur
 
 APP_TITRE = "Suivi des loyers — générateur"
 ANNEE = dt.date.today().year
+TYPES_BIEN = moteur.TYPES_BIEN
 
 
 def _parse_nombre(txt: str) -> float:
@@ -29,7 +30,6 @@ def _parse_nombre(txt: str) -> float:
 
 
 def _parse_date(txt: str) -> str:
-    """Valide une date AAAA-MM-JJ et la renvoie en texte (ou '' si vide)."""
     txt = (txt or "").strip()
     if not txt:
         return ""
@@ -42,7 +42,7 @@ def _parse_date(txt: str) -> str:
 # --------------------------------------------------------------------------- #
 
 class DialogueLocataire(tk.Toplevel):
-    def __init__(self, parent, modules: dict, valeurs: dict | None = None):
+    def __init__(self, parent, modules: dict, adresses: list[str], valeurs: dict | None = None):
         super().__init__(parent)
         self.title("Locataire")
         self.resizable(False, False)
@@ -52,45 +52,60 @@ class DialogueLocataire(tk.Toplevel):
 
         v = valeurs or {}
         split, caf, depot = modules["loyer_nu_charges"], modules["caf"], modules["depot_garantie"]
-
         self._vars: dict[str, tk.StringVar] = {}
+        self._champs_num: set[str] = set()
         ligne = 0
 
-        def champ(libelle: str, cle: str, defaut="") -> None:
+        def libelle(texte: str) -> None:
             nonlocal ligne
-            ttk.Label(self, text=libelle).grid(row=ligne, column=0, sticky="w", padx=8, pady=4)
-            var = tk.StringVar(value=str(v.get(cle, defaut)) if v.get(cle) not in (None, "") else "")
-            ttk.Entry(self, textvariable=var, width=34).grid(
-                row=ligne, column=1, padx=8, pady=4)
+            ttk.Label(self, text=texte).grid(row=ligne, column=0, sticky="w", padx=8, pady=4)
+
+        def entree(cle: str, *, num=False, defaut="") -> None:
+            nonlocal ligne
+            var = tk.StringVar(value=str(v[cle]) if v.get(cle) not in (None, "") else defaut)
+            ttk.Entry(self, textvariable=var, width=34).grid(row=ligne, column=1, padx=8, pady=4)
+            self._vars[cle] = var
+            if num:
+                self._champs_num.add(cle)
+            ligne += 1
+
+        def combo(cle: str, valeurs_combo: list[str], *, readonly=False, defaut="") -> None:
+            nonlocal ligne
+            var = tk.StringVar(value=str(v.get(cle, defaut)) if v.get(cle) not in (None,) else defaut)
+            cb = ttk.Combobox(self, textvariable=var, values=valeurs_combo, width=32,
+                              state="readonly" if readonly else "normal")
+            cb.grid(row=ligne, column=1, padx=8, pady=4)
             self._vars[cle] = var
             ligne += 1
 
-        champ("Nom du locataire *", "nom")
-        champ("Bien / logement", "bien")
+        libelle("Nom / Prénom *"); entree("nom")
+        libelle("Type de bien"); combo("type_bien", TYPES_BIEN, readonly=True,
+                                        defaut=v.get("type_bien", TYPES_BIEN[0]))
+        libelle("N° d'appartement / Nom de la maison"); entree("identifiant")
+        libelle("Adresse du logement"); combo("adresse", adresses)
         if split:
-            champ("Loyer nu (€)", "loyer_nu")
-            champ("Charges (€)", "charges")
+            libelle("Loyer nu (€)"); entree("loyer_nu", num=True)
+            libelle("Charges (€)"); entree("charges", num=True)
         else:
-            champ("Loyer (€)", "loyer")
+            libelle("Loyer (€)"); entree("loyer", num=True)
         if caf:
-            champ("Part CAF / APL (€)", "part_caf")
+            libelle("Part CAF / APL (€)"); entree("part_caf", num=True)
         if depot:
-            champ("Dépôt de garantie (€)", "depot_garantie")
-        champ("Date d'entrée (AAAA-MM-JJ)", "date_entree")
-        champ("Date de sortie (AAAA-MM-JJ)", "date_sortie")
+            libelle("Dépôt de garantie (€)"); entree("depot_garantie", num=True)
+        libelle("Date d'entrée (AAAA-MM-JJ)"); entree("date_entree")
+        libelle("Date de sortie (AAAA-MM-JJ)"); entree("date_sortie")
 
-        ttk.Label(self, text="Laissez la date de sortie vide si le locataire est toujours présent.",
-                  foreground="#666").grid(row=ligne, column=0, columnspan=2, padx=8, pady=(0, 6))
+        ttk.Label(self, text="Adresse : choisissez-en une déjà saisie ou tapez-en une nouvelle. "
+                             "Sortie vide = locataire toujours présent.",
+                  foreground="#666", wraplength=320, justify="left").grid(
+            row=ligne, column=0, columnspan=2, padx=8, pady=(2, 6), sticky="w")
         ligne += 1
 
         barre = ttk.Frame(self)
         barre.grid(row=ligne, column=0, columnspan=2, pady=8)
         ttk.Button(barre, text="Valider", command=self._valider).pack(side="left", padx=6)
         ttk.Button(barre, text="Annuler", command=self.destroy).pack(side="left", padx=6)
-
         self.bind("<Return>", lambda e: self._valider())
-        self._vars["nom"]  # focus
-        self.update_idletasks()
 
     def _valider(self) -> None:
         data: dict = {}
@@ -103,7 +118,7 @@ class DialogueLocataire(tk.Toplevel):
                 if cle == "nom":
                     continue
                 val = var.get().strip()
-                if cle in ("loyer_nu", "charges", "loyer", "part_caf", "depot_garantie"):
+                if cle in self._champs_num:
                     data[cle] = _parse_nombre(val)
                 elif cle in ("date_entree", "date_sortie"):
                     data[cle] = _parse_date(val)
@@ -121,17 +136,16 @@ class DialogueLocataire(tk.Toplevel):
 # --------------------------------------------------------------------------- #
 
 class Application(tk.Tk):
-    COLS = [("nom", "Locataire", 160), ("bien", "Bien", 180),
-            ("loyer", "Loyer/Nu", 80), ("charges", "Charges", 70),
-            ("part_caf", "CAF", 70), ("depot_garantie", "Dépôt", 70),
+    COLS = [("nom", "Nom / Prénom", 150), ("type_bien", "Type", 90),
+            ("identifiant", "N° / Nom", 130), ("adresse", "Adresse", 160),
+            ("loyer", "Loyer", 70), ("part_caf", "CAF", 60),
             ("date_entree", "Entrée", 90), ("date_sortie", "Sortie", 90)]
 
     def __init__(self):
         super().__init__()
         self.title(APP_TITRE)
-        self.minsize(820, 620)
+        self.minsize(880, 640)
         self.locataires: list[dict] = []
-
         self._init_style()
         self._construire()
 
@@ -148,7 +162,6 @@ class Application(tk.Tk):
         ttk.Label(self, text="Générateur de suivi des loyers", style="Titre.TLabel").pack(
             anchor="w", padx=14, pady=(12, 4))
 
-        # ----- Bailleur -----
         bf = ttk.LabelFrame(self, text="Bailleur", style="Section.TLabelframe")
         bf.pack(fill="x", padx=14, pady=6)
         self.var_nom = tk.StringVar()
@@ -161,7 +174,6 @@ class Application(tk.Tk):
             ttk.Label(bf, text=lab).grid(row=r, column=c * 2, sticky="w", padx=8, pady=4)
             ttk.Entry(bf, textvariable=var, width=34).grid(row=r, column=c * 2 + 1, padx=8, pady=4)
 
-        # ----- Période + modules -----
         pm = ttk.Frame(self)
         pm.pack(fill="x", padx=14, pady=6)
 
@@ -181,20 +193,18 @@ class Application(tk.Tk):
         self.var_split = tk.BooleanVar(value=True)
         self.var_caf = tk.BooleanVar(value=True)
         self.var_depot = tk.BooleanVar(value=True)
-        self.var_quittances = tk.BooleanVar(value=True)
+        self.var_documents = tk.BooleanVar(value=True)
         ttk.Checkbutton(mf, text="Séparer loyer nu / charges",
                         variable=self.var_split).pack(anchor="w", padx=8, pady=2)
         ttk.Checkbutton(mf, text="Suivre la part CAF (tiers payant)",
                         variable=self.var_caf).pack(anchor="w", padx=8, pady=2)
         ttk.Checkbutton(mf, text="Suivre le dépôt de garantie",
                         variable=self.var_depot).pack(anchor="w", padx=8, pady=2)
-        ttk.Checkbutton(mf, text="Générer un onglet quittance de loyer",
-                        variable=self.var_quittances).pack(anchor="w", padx=8, pady=2)
+        ttk.Checkbutton(mf, text="Documents à imprimer (quittance, avis, relance)",
+                        variable=self.var_documents).pack(anchor="w", padx=8, pady=2)
 
-        # ----- Locataires -----
         lf = ttk.LabelFrame(self, text="Locataires", style="Section.TLabelframe")
         lf.pack(fill="both", expand=True, padx=14, pady=6)
-
         cols = [c[0] for c in self.COLS]
         self.tree = ttk.Treeview(lf, columns=cols, show="headings", height=8)
         for cle, titre, larg in self.COLS:
@@ -212,7 +222,6 @@ class Application(tk.Tk):
         ttk.Button(bl, text="Modifier", command=self._modifier_locataire).pack(fill="x", pady=3)
         ttk.Button(bl, text="Supprimer", command=self._supprimer_locataire).pack(fill="x", pady=3)
 
-        # ----- Barre d'actions -----
         af = ttk.Frame(self)
         af.pack(fill="x", padx=14, pady=(4, 14))
         ttk.Button(af, text="Charger une config…", command=self._charger).pack(side="left")
@@ -221,26 +230,34 @@ class Application(tk.Tk):
         self.var_save_config = tk.BooleanVar(value=True)
         ttk.Checkbutton(af, text="Enregistrer aussi la configuration",
                         variable=self.var_save_config).pack(side="left", padx=(16, 0))
-        ttk.Button(af, text="Générer le fichier Excel", command=self._generer).pack(
-            side="right")
+        ttk.Button(af, text="Générer le fichier Excel", command=self._generer).pack(side="right")
 
     # ------------------------- gestion locataires ------------------------- #
 
     def _modules(self) -> dict:
         return {"loyer_nu_charges": self.var_split.get(), "caf": self.var_caf.get(),
-                "depot_garantie": self.var_depot.get(), "quittances": self.var_quittances.get()}
+                "depot_garantie": self.var_depot.get(), "documents": self.var_documents.get()}
+
+    def _adresses(self) -> list[str]:
+        vues, ordre = set(), []
+        for loc in self.locataires:
+            a = (loc.get("adresse") or "").strip()
+            if a and a not in vues:
+                vues.add(a)
+                ordre.append(a)
+        return ordre
 
     def _rafraichir_tree(self) -> None:
         self.tree.delete(*self.tree.get_children())
         for loc in self.locataires:
             loyer = loc.get("loyer_nu", loc.get("loyer", ""))
             self.tree.insert("", "end", values=(
-                loc.get("nom", ""), loc.get("bien", ""), loyer, loc.get("charges", ""),
-                loc.get("part_caf", ""), loc.get("depot_garantie", ""),
+                loc.get("nom", ""), loc.get("type_bien", ""), loc.get("identifiant", ""),
+                loc.get("adresse", ""), loyer, loc.get("part_caf", ""),
                 loc.get("date_entree", ""), loc.get("date_sortie", "")))
 
     def _ajouter_locataire(self) -> None:
-        d = DialogueLocataire(self, self._modules())
+        d = DialogueLocataire(self, self._modules(), self._adresses())
         self.wait_window(d)
         if d.resultat:
             self.locataires.append(d.resultat)
@@ -248,16 +265,14 @@ class Application(tk.Tk):
 
     def _selection(self) -> int | None:
         sel = self.tree.selection()
-        if not sel:
-            return None
-        return self.tree.index(sel[0])
+        return self.tree.index(sel[0]) if sel else None
 
     def _modifier_locataire(self) -> None:
         i = self._selection()
         if i is None:
             messagebox.showinfo(APP_TITRE, "Sélectionnez un locataire à modifier.")
             return
-        d = DialogueLocataire(self, self._modules(), self.locataires[i])
+        d = DialogueLocataire(self, self._modules(), self._adresses(), self.locataires[i])
         self.wait_window(d)
         if d.resultat:
             self.locataires[i] = d.resultat
@@ -296,7 +311,7 @@ class Application(tk.Tk):
         self.var_split.set(bool(m.get("loyer_nu_charges", True)))
         self.var_caf.set(bool(m.get("caf", True)))
         self.var_depot.set(bool(m.get("depot_garantie", True)))
-        self.var_quittances.set(bool(m.get("quittances", True)))
+        self.var_documents.set(bool(m.get("documents", m.get("quittances", True))))
         self.locataires = list(cfg.get("locataires", []))
         self._rafraichir_tree()
 
@@ -348,14 +363,12 @@ class Application(tk.Tk):
         slug = moteur._slug(cfg["bailleur"]["nom"])
         chemin = filedialog.asksaveasfilename(
             title="Enregistrer le classeur de suivi", defaultextension=".xlsx",
-            initialfile=f"Suivi_{slug}.xlsx",
-            filetypes=[("Classeur Excel", "*.xlsx")])
+            initialfile=f"Suivi_{slug}.xlsx", filetypes=[("Classeur Excel", "*.xlsx")])
         if not chemin:
             return
         chemin = Path(chemin)
 
-        # Par défaut, on range le classeur dans un dossier dédié (xlsx + config ensemble).
-        # Si on régénère par-dessus un fichier existant, on reste dans son dossier (pas d'imbrication).
+        # Par défaut, dossier dédié (xlsx + config). En régénération, on reste dans le dossier.
         if chemin.exists():
             xlsx = chemin
         else:
@@ -377,7 +390,6 @@ class Application(tk.Tk):
             messagebox.showerror(APP_TITRE, f"Erreur pendant la génération :\n{e}")
             return
 
-        # Sauvegarde de la config à côté du classeur (au cas où l'export manuel serait oublié).
         msg = f"Fichier généré :\n{sortie}"
         if self.var_save_config.get():
             try:

@@ -20,8 +20,14 @@ Une fois que vous avez le fichier `SuiviLoyers.exe` :
    - *Séparer loyer nu / charges* : si vous suivez le loyer et les charges séparément.
    - *Suivre la part CAF* : si une partie du loyer est versée directement par la CAF.
    - *Suivre le dépôt de garantie*.
-4. Ajoutez les **locataires** (bouton *Ajouter*). Pour chacun : nom, logement, montants, date
-   d'entrée, et date de sortie s'il est parti.
+   - *Documents à imprimer* : ajoute les onglets quittance, avis d'échéance et lettre de relance.
+4. Ajoutez les **locataires** (bouton *Ajouter*). Pour chacun :
+   - *Nom / Prénom*.
+   - *Type de bien* : appartement ou maison.
+   - *N° d'appartement / Nom de la maison* : sert de nom à l'onglet du locataire.
+   - *Adresse du logement* : choisissez une adresse déjà saisie (pratique pour plusieurs
+     appartements au même immeuble) ou tapez-en une nouvelle.
+   - Les montants, la date d'entrée, et la date de sortie s'il est parti.
 5. Cliquez sur **Générer le fichier Excel** et choisissez où l'enregistrer.
 
 Le logiciel crée un **dossier dédié** à ce bailleur. Dedans, vous trouvez le classeur Excel
@@ -29,7 +35,8 @@ Le logiciel crée un **dossier dédié** à ce bailleur. Dedans, vous trouvez le
 réglages la fois suivante, même si vous oubliez de l'exporter à la main. La case *Enregistrer
 aussi la configuration* est cochée par défaut ; décochez-la si vous ne voulez que le classeur.
 
-Ensuite, chaque mois, ouvrez le fichier Excel et saisissez les montants **reçus** dans les
+Le classeur a **un onglet par locataire**, nommé d'après le numéro d'appartement ou le nom de
+la maison. C'est lui qu'on remplit : chaque mois, saisissez les montants **reçus** dans les
 cases jaunes (CAF reçue, part locataire reçue, dates). Tout le reste (totaux, écarts, statut,
 bilan) se calcule automatiquement. Ne touchez pas aux cases bleutées.
 
@@ -42,13 +49,13 @@ bilan) se calcule automatiquement. Ne touchez pas aux cases bleutées.
 | Partiel | rouge | Reçu inférieur au dû (impayé partiel). |
 | À encaisser | gris | Aucun paiement saisi pour ce mois. |
 
-### Éditer une quittance de loyer
+### Imprimer un document (quittance, avis, relance)
 
-Si l'option *quittance* est activée, le classeur a un onglet **Quittance**. Choisissez le
-**locataire**, le **mois** et l'**année** dans les trois listes déroulantes : le document se
-remplit seul (montants, date de paiement, texte de quittance) et s'imprime. Quand le loyer
-n'est pas réglé en entier pour la période, le document le signale et vaut reçu du montant
-versé, pas quittance.
+Si l'option *Documents à imprimer* est activée, le classeur a trois onglets : **Quittance**,
+**Avis d'échéance** et **Lettre de relance**. Dans chacun, choisissez le **locataire**, le
+**mois** et l'**année** dans les listes déroulantes : le document se remplit seul (montants,
+texte) et s'imprime. La quittance ne vaut que si le loyer est intégralement réglé pour la
+période ; sinon elle le signale et vaut reçu du montant versé.
 
 ### Changer de locataire plus tard
 

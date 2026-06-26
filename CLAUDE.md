@@ -25,9 +25,17 @@ et par l'interface. Garder cette frontière : pas de logique métier dans l'inte
 
 ## Onglets du classeur
 
-`Guide` · `Locataires` (référentiel + plages nommées) · `Suivi` (saisie mensuelle) · `Bilan`
-(synthèse `SUMIFS`). Le `Suivi` et le `Bilan` lisent le référentiel via `RECHERCHEV` /
-plages nommées. Ne pas dupliquer les montants en dur.
+`Guide` · `Locataires` (référentiel) · **une feuille par locataire** (saisie, nommée par
+l'identifiant du bien) · `Données` (consolidée, **masquée**) · `Bilan` · documents (`Quittance`,
+`Avis d'échéance`, `Lettre de relance`).
+
+Flux de données clé :
+- La saisie a lieu dans les **feuilles locataire** (`construire_feuilles_locataires`). Leurs
+  colonnes calculées référencent la ligne du locataire dans `Locataires` (`_ref`).
+- `Données` (`construire_donnees`, masquée) recopie chaque ligne par formule depuis les
+  feuilles locataire et porte les **plages nommées `Suivi_*`**. Aucune double saisie.
+- `Bilan` et les **documents** consomment uniquement ces plages `Suivi_*` via `SUMIFS`
+  (sélection dynamique du locataire = `SUMIFS`, surtout pas d'`INDIRECT`).
 
 ## Règles à respecter
 
@@ -37,12 +45,15 @@ plages nommées. Ne pas dupliquer les montants en dur.
 - **Colonnes pilotées par les modules** (`loyer_nu_charges`, `caf`, `depot_garantie`). Une
   option désactivée doit retirer les colonnes correspondantes sans casser les formules ni les
   plages nommées. Tester systématiquement une config « minimale » (tout à `false`).
-- **Période d'activité** : `construire_suivi` ne génère des lignes que sur les mois compris
-  entre `date_entree` et `date_sortie` (`_mois_actifs`). C'est ce qui gère les rotations de
-  locataires. Ne pas revenir à une grille pleine.
+- **Période d'activité** : on ne génère des lignes que sur les mois compris entre `date_entree`
+  et `date_sortie` (`_mois_actifs`). C'est ce qui gère les rotations de locataires. Ne pas
+  revenir à une grille pleine.
 - **Préservation des saisies** : toute régénération sur un fichier existant doit passer par
-  `recolter_saisies` puis réinjection dans `construire_suivi(saisies=...)`. La clé est
-  `(nom, année, mois)`. Ne jamais écraser un fichier sans cette reprise quand `preserver=True`.
+  `recolter_saisies` (qui lit **chaque feuille locataire**, pas un onglet `Suivi` unique) puis
+  réinjection via `construire_feuilles_locataires(saisies=...)`. Clé `(nom, année, mois)`.
+  Ne jamais écraser un fichier sans cette reprise quand `preserver=True`.
+- **Nom de feuille locataire** : passe par `_nom_feuille` (≤ 31 car., caractères interdits,
+  unicité). Toute référence inter-feuilles passe par `_ref` (gère espaces et apostrophes).
 
 ## Workflow de fin de modification
 
