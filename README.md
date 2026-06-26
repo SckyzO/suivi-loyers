@@ -22,12 +22,17 @@ Une fois que vous avez le fichier `SuiviLoyers.exe` :
    - *Suivre le dépôt de garantie*.
    - *Documents à imprimer* : ajoute les onglets quittance, avis d'échéance et lettre de relance.
 4. Ajoutez les **locataires** (bouton *Ajouter*). Pour chacun :
-   - *Nom / Prénom*.
+   - *Nom* et *Prénom* (deux champs séparés).
    - *Type de bien* : appartement ou maison.
-   - *N° d'appartement / Nom de la maison* : sert de nom à l'onglet du locataire.
+   - *N° d'appartement / Nom de la maison* : sert de nom à l'onglet, combiné au nom du
+     locataire (« Appt 101 - Dupont »), ce qui évite les doublons si un même logement a eu
+     plusieurs locataires.
    - *Adresse du logement* : choisissez une adresse déjà saisie (pratique pour plusieurs
      appartements au même immeuble) ou tapez-en une nouvelle.
-   - Les montants, la date d'entrée, et la date de sortie s'il est parti.
+   - Les montants et la *date d'entrée* (calendrier).
+   - Si le locataire est parti, cochez **Le locataire est parti** : cela active la *date de
+     sortie*, la case *Caution rendue* et le *motif de départ* (liste : fin de bail, loyer
+     impayé, travaux… ou un texte libre).
 5. Cliquez sur **Générer le fichier Excel** et choisissez où l'enregistrer.
 
 Le logiciel crée un **dossier dédié** à ce bailleur. Dedans, vous trouvez le classeur Excel
@@ -35,10 +40,11 @@ Le logiciel crée un **dossier dédié** à ce bailleur. Dedans, vous trouvez le
 réglages la fois suivante, même si vous oubliez de l'exporter à la main. La case *Enregistrer
 aussi la configuration* est cochée par défaut ; décochez-la si vous ne voulez que le classeur.
 
-Le classeur a **un onglet par locataire**, nommé d'après le numéro d'appartement ou le nom de
-la maison. C'est lui qu'on remplit : chaque mois, saisissez les montants **reçus** dans les
-cases jaunes (CAF reçue, part locataire reçue, dates). Tout le reste (totaux, écarts, statut,
-bilan) se calcule automatiquement. Ne touchez pas aux cases bleutées.
+Le classeur a **un onglet par locataire**, nommé « N° / nom du bien - Nom du locataire ».
+C'est lui qu'on remplit : chaque mois, saisissez les montants **reçus** dans les cases jaunes
+(CAF reçue, part locataire reçue, dates). Tout le reste (totaux, écarts, statut, bilan) se
+calcule automatiquement. Ne touchez pas aux cases bleutées. Un **total par année** est ajouté
+en bas de chaque année, avec une ligne vide de séparation pour la lisibilité.
 
 ### Les couleurs du suivi
 

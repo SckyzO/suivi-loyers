@@ -53,7 +53,14 @@ Flux de données clé :
   réinjection via `construire_feuilles_locataires(saisies=...)`. Clé `(nom, année, mois)`.
   Ne jamais écraser un fichier sans cette reprise quand `preserver=True`.
 - **Nom de feuille locataire** : passe par `_nom_feuille` (≤ 31 car., caractères interdits,
-  unicité). Toute référence inter-feuilles passe par `_ref` (gère espaces et apostrophes).
+  unicité), au format « identifiant - Nom ». Toute référence inter-feuilles passe par `_ref`
+  (gère espaces et apostrophes).
+- **Identité locataire** : `_identite(loc)` = « Nom Prénom » (clé unique partout : feuilles,
+  Données, Bilan, documents, IRL, préservation). Le bail stocke `nom` + `prenom` séparés.
+- **Couleurs conditionnelles** : toujours via `_fill_cf` (start+end color = bgColor). Un fill
+  conditionnel avec `fgColor` seul N'APPARAÎT PAS dans Excel (bug corrigé).
+- **Totaux annuels** dans les feuilles locataire : ligne « Total <année> » + ligne vide entre
+  années. `rows_map` ne contient que les lignes de mois, donc `Données`/IRL restent corrects.
 
 ## Workflow de fin de modification
 

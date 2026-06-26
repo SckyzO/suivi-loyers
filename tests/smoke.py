@@ -18,9 +18,11 @@ CFG_COMPLET = {
     "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True,
                 "documents": True, "regularisation_charges": True, "irl": True},
     "locataires": [
-        {"nom": "Alice", "type_bien": "Appartement", "identifiant": "Appt 1",
+        # Nom + prénom, parti en cours de période (caution + observation).
+        {"nom": "Alice", "prenom": "A", "type_bien": "Appartement", "identifiant": "Appt 1",
          "adresse": "1 rue A", "loyer_nu": 500, "charges": 50, "part_caf": 200,
-         "depot_garantie": 500, "date_entree": "2024-01-01"},
+         "depot_garantie": 500, "date_entree": "2024-01-01", "date_sortie": "2024-06-30",
+         "caution_rendue": False, "observation": "Travaux"},
         {"nom": "Bob", "type_bien": "Appartement", "identifiant": "Appt 2",
          "adresse": "1 rue A", "loyer_nu": 400, "charges": 40, "part_caf": 0,
          "depot_garantie": 400, "date_entree": "2025-07-01"},  # entré en cours de période
@@ -52,7 +54,8 @@ def main() -> int:
     f1 = tmp / "complet.xlsx"
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
-    attendus = ["Guide", "Locataires", "Appt 1", "Appt 2", "Données", "Bilan",
+    # Onglet locataire nommé « identifiant - Nom » (évite les doublons même appartement).
+    attendus = ["Guide", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob", "Données", "Bilan",
                 "Régularisation charges", "Révision IRL",
                 "Quittance", "Avis d'échéance", "Lettre de relance"]
     assert wb.sheetnames == attendus, wb.sheetnames
@@ -60,32 +63,46 @@ def main() -> int:
     assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
     assert wb["Avis d'échéance"]["B2"].value == "AVIS D'ÉCHÉANCE"
 
-    # Feuille locataire : colonnes CAF présentes + titre/identifiant.
-    ws = wb["Appt 1"]
-    assert ws.cell(1, 2).value == "Alice"
+    # Identité = « Nom Prénom ».
+    assert g._identite({"nom": "Martin", "prenom": "Sophie"}) == "Martin Sophie"
+    assert g._identite({"nom": "Old"}) == "Old"
+
+    # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
+    loc = wb["Locataires"]
+    hl = {loc.cell(1, c).value: c for c in range(1, loc.max_column + 1)}
+    assert list(hl).index("Type de bien") > list(hl).index("Adresse du logement")
+    assert loc.cell(2, hl["Caution rendue"]).value == "Non"
+    assert loc.cell(2, hl["Observation (motif de départ)"]).value == "Travaux"
+
+    # Feuille locataire : titre = identité, colonnes CAF présentes.
+    ws = wb["Appt 1 - Alice"]
+    assert ws.cell(1, 2).value == "Alice A"
     assert ws.cell(1, 4).value == "Appt 1"
     _, ent = ligne_entete(ws)
     assert "CAF reçue" in ent and "Charges dues" in ent, list(ent)
 
-    # 2) Période d'activité : Bob entré 07/2025 -> 6 lignes (07->12/2025).
-    wsb = wb["Appt 2"]
+    # 2) Période d'activité : Bob entré 07/2025 -> 6 mois. Totaux annuels présents.
+    wsb = wb["Appt 2 - Bob"]
     rb, _ = ligne_entete(wsb)
-    nb_b = sum(1 for r in range(rb + 1, wsb.max_row + 1) if wsb.cell(r, 3).value)
+    nb_b = sum(1 for r in range(rb + 1, wsb.max_row + 1)
+               if wsb.cell(r, 3).value in g.MOIS)
     assert nb_b == 6, f"Bob devrait avoir 6 mois, obtenu {nb_b}"
+    assert any(str(wsb.cell(r, 3).value or "").startswith("Total")
+               for r in range(rb + 1, wsb.max_row + 1)), "ligne Total annuel manquante"
 
     # 3) Bailleur minimal : pas de CAF, pas de documents.
     f2 = tmp / "minimal.xlsx"
     g.generer_workbook(g.valider_config(CFG_MINIMAL), f2)
     wb2 = load_workbook(f2)
     assert "Quittance" not in wb2.sheetnames, wb2.sheetnames
-    assert "Maison" in wb2.sheetnames, wb2.sheetnames
-    _, ent2 = ligne_entete(wb2["Maison"])
+    assert "Maison - Carl" in wb2.sheetnames, wb2.sheetnames
+    _, ent2 = ligne_entete(wb2["Maison - Carl"])
     assert not any("CAF" in (k or "") for k in ent2), list(ent2)
     assert "Loyer dû" in ent2, list(ent2)
 
     # 4) Préservation : on saisit dans la feuille d'Alice, on régénère avec un locataire en plus.
     wb = load_workbook(f1)
-    ws = wb["Appt 1"]
+    ws = wb["Appt 1 - Alice"]
     r_ent, ent = ligne_entete(ws)
     r0 = r_ent + 1
     ws.cell(r0, ent["Part locataire reçue"]).value = 333
@@ -101,8 +118,8 @@ def main() -> int:
     g.generer_workbook(cfg2, f1, preserver=True)
 
     wb = load_workbook(f1)
-    assert "Villa" in wb.sheetnames, wb.sheetnames
-    ws = wb["Appt 1"]
+    assert "Villa - Dora" in wb.sheetnames, wb.sheetnames
+    ws = wb["Appt 1 - Alice"]
     r_ent, ent = ligne_entete(ws)
     trouve = None
     for r in range(r_ent + 1, ws.max_row + 1):
@@ -164,7 +181,7 @@ def main() -> int:
     f3 = tmp / "legacy.xlsx"
     g.generer_workbook(g.valider_config(legacy), f3)
     wb3 = load_workbook(f3)
-    assert "Appt Z" in wb3.sheetnames and "Quittance" in wb3.sheetnames, wb3.sheetnames
+    assert "Appt Z - Old" in wb3.sheetnames and "Quittance" in wb3.sheetnames, wb3.sheetnames
 
     print("SMOKE OK")
     return 0

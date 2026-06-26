@@ -15,7 +15,8 @@ modules:
   documents: false
 
 locataires:
-  - nom: "Lefevre Paul"
+  - nom: "Lefevre"
+    prenom: "Paul"
     type_bien: "Maison"
     identifiant: "Maison principale"
     adresse: "3 impasse du Clos, 35000 Rennes"

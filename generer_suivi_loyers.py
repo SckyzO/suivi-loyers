@@ -75,6 +75,13 @@ FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan", "Régularisation
 
 TRIMESTRES = ["T1", "T2", "T3", "T4"]
 
+# Motifs de départ proposés (liste déroulante, saisie libre possible).
+OBSERVATIONS = [
+    "Fin de bail", "Congé du locataire", "Congé du bailleur (vente)",
+    "Congé du bailleur (reprise)", "Loyer impayé", "Travaux",
+    "Dégradations (retenue sur caution)", "Départ anticipé", "Abandon de logement",
+]
+
 MODULES_DEFAUT = {
     "loyer_nu_charges": True,
     "caf": True,
@@ -206,6 +213,13 @@ def _slug(nom: str) -> str:
     return s.strip("_") or "bailleur"
 
 
+def _identite(loc: dict) -> str:
+    """Identité d'un locataire (clé interne) = « Nom Prénom » (ou nom seul si pas de prénom)."""
+    nom = str(loc.get("nom") or "").strip()
+    prenom = str(loc.get("prenom") or "").strip()
+    return f"{nom} {prenom}".strip() if prenom else nom
+
+
 _CAR_INTERDITS = set('[]:*?/\\')
 
 
@@ -237,6 +251,15 @@ def style_entete(cell) -> None:
     cell.border = BORDURE
 
 
+def _fill_cf(couleur: str) -> PatternFill:
+    """Remplissage pour la mise en forme conditionnelle.
+
+    Dans un format conditionnel (dxf), Excel lit la couleur sur bgColor, pas fgColor :
+    il faut donc renseigner start_color ET end_color, sinon la couleur n'apparaît pas.
+    """
+    return PatternFill(start_color=couleur, end_color=couleur, fill_type="solid")
+
+
 def style_cellule(cell, *, saisie=False, calc=False, fmt=None) -> None:
     if saisie:
         cell.fill = PatternFill("solid", fgColor=COUL_SAISIE)
@@ -257,11 +280,12 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
 
     ws = wb.create_sheet("Locataires")
 
+    # Colonne 1 = identité (clé pour RECHERCHEV / listes). Type de bien APRÈS l'adresse.
     cols: list[tuple[str, str]] = [
-        ("nom", "Nom / Prénom"),
-        ("type_bien", "Type de bien"),
+        ("locataire", "Locataire (Nom Prénom)"),
         ("identifiant", "N° appart. / Nom maison"),
         ("adresse", "Adresse du logement"),
+        ("type_bien", "Type de bien"),
     ]
     if split:
         cols += [("loyer_nu", "Loyer nu (€)"), ("charges", "Charges (€)")]
@@ -272,6 +296,9 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     if depot:
         cols.append(("depot", "Dépôt garantie (€)"))
     cols += [("date_entree", "Date entrée"), ("date_sortie", "Date sortie")]
+    if depot:
+        cols.append(("caution", "Caution rendue"))
+    cols.append(("observation", "Observation (motif de départ)"))
 
     idx = {champ: i + 1 for i, (champ, _) in enumerate(cols)}
     lettre = {champ: get_column_letter(i + 1) for i, (champ, _) in enumerate(cols)}
@@ -279,17 +306,19 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     for i, (_, titre) in enumerate(cols, 1):
         style_entete(ws.cell(row=1, column=i, value=titre))
 
-    largeurs = {"nom": 22, "type_bien": 14, "identifiant": 22, "adresse": 30,
+    largeurs = {"locataire": 22, "type_bien": 14, "identifiant": 20, "adresse": 28,
                 "loyer_nu": 13, "charges": 13, "loyer_total": 14, "part_caf": 16,
-                "reste": 16, "depot": 16, "date_entree": 13, "date_sortie": 13}
+                "reste": 16, "depot": 16, "date_entree": 13, "date_sortie": 13,
+                "caution": 14, "observation": 28}
     for champ, l in lettre.items():
         ws.column_dimensions[l].width = largeurs.get(champ, 14)
 
     for r, loc in enumerate(cfg["locataires"], start=2):
-        ws.cell(r, idx["nom"], loc.get("nom"))
-        ws.cell(r, idx["type_bien"], loc.get("type_bien", TYPES_BIEN[0]))
+        a_sortie = _date(loc.get("date_sortie")) is not None
+        ws.cell(r, idx["locataire"], _identite(loc))
         ws.cell(r, idx["identifiant"], loc.get("identifiant", ""))
         ws.cell(r, idx["adresse"], loc.get("adresse", ""))
+        ws.cell(r, idx["type_bien"], loc.get("type_bien", TYPES_BIEN[0]))
         if split:
             ws.cell(r, idx["loyer_nu"], _num(loc, "loyer_nu") or 0)
             ws.cell(r, idx["charges"], _num(loc, "charges") or 0)
@@ -307,31 +336,43 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
             ws.cell(r, idx["date_entree"], de)
         if (ds := _date(loc.get("date_sortie"))):
             ws.cell(r, idx["date_sortie"], ds)
+        # Caution rendue / observation : pertinents seulement si le locataire est parti.
+        if depot and a_sortie:
+            ws.cell(r, idx["caution"], "Oui" if loc.get("caution_rendue") else "Non")
+        if a_sortie and loc.get("observation"):
+            ws.cell(r, idx["observation"], loc.get("observation"))
 
     derniere = len(cfg["locataires"]) + 1
 
     fmt_par_champ = {"loyer_nu": FMT_EURO, "charges": FMT_EURO, "loyer_total": FMT_EURO,
                      "part_caf": FMT_EURO, "reste": FMT_EURO, "depot": FMT_EURO,
                      "date_entree": FMT_DATE, "date_sortie": FMT_DATE}
+    saisie_champs = {"locataire", "identifiant", "adresse", "type_bien", "loyer_nu", "charges",
+                     "part_caf", "depot", "date_entree", "date_sortie", "caution", "observation"}
     for r in range(2, derniere + 1):
         for champ, i in idx.items():
             cell = ws.cell(r, i)
             est_formule = isinstance(cell.value, str) and cell.value.startswith("=")
             style_cellule(cell, fmt=fmt_par_champ.get(champ), calc=est_formule,
-                          saisie=not est_formule and champ != "reste")
+                          saisie=not est_formule and champ in saisie_champs)
 
-    # Validation : type de bien.
-    dv = DataValidation(type="list", formula1='"%s"' % ",".join(TYPES_BIEN), allow_blank=True)
-    dv.add(f"{lettre['type_bien']}2:{lettre['type_bien']}{derniere}")
-    ws.add_data_validation(dv)
+    def validation(champ: str, valeurs: list[str], *, bloquant=True) -> None:
+        dv = DataValidation(type="list", formula1='"%s"' % ",".join(valeurs),
+                            allow_blank=True, showErrorMessage=bloquant)
+        dv.add(f"{lettre[champ]}2:{lettre[champ]}{derniere}")
+        ws.add_data_validation(dv)
 
-    table = Table(displayName="TblLocataires",
-                  ref=f"A1:{lettre['date_sortie']}{derniere}")
+    validation("type_bien", TYPES_BIEN)
+    if depot:
+        validation("caution", ["Oui", "Non"])
+    validation("observation", OBSERVATIONS, bloquant=False)  # motif libre autorisé
+
+    der_col = lettre[cols[-1][0]]
+    table = Table(displayName="TblLocataires", ref=f"A1:{der_col}{derniere}")
     table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
     ws.add_table(table)
-    ws.freeze_panes = "A2"
+    ws.freeze_panes = "B2"
 
-    der_col = lettre["date_sortie"]
     wb.defined_names.add(DefinedName("LocatairesListe",
                                      attr_text=f"Locataires!$A$2:$A${derniere}"))
     wb.defined_names.add(DefinedName("RefLocataires",
@@ -397,21 +438,25 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
     pris: set = set()
     infos: list[dict] = []
 
+    # Colonnes totalisées dans la ligne « Total <année> ».
+    cols_total = ["total_du"] + (["caf_recu"] if caf else []) + \
+        ["loc_recu", "total_recu", "ecart"]
+
     for loc_index, loc in enumerate(cfg["locataires"]):
-        nom = loc.get("nom")
-        ident = loc.get("identifiant") or nom
-        feuille = _nom_feuille(ident, pris)
+        ident_complet = _identite(loc)
+        identifiant = str(loc.get("identifiant") or "").strip()
+        surname = str(loc.get("nom") or "").strip() or ident_complet
+        base = " - ".join(p for p in (identifiant, surname) if p) or ident_complet
+        feuille = _nom_feuille(base, pris)
         ws = wb.create_sheet(feuille)
         ws.sheet_view.showGridLines = False
         rloc = loc_index + 2  # ligne du locataire dans l'onglet Locataires
 
-        # Titre + adresse.
-        ws.cell(1, 2, f"{nom}").font = Font(bold=True, size=14, color=COUL_ENTETE)
-        ws.cell(1, 4, str(ident)).font = Font(bold=True, size=12)
+        ws.cell(1, 2, ident_complet).font = Font(bold=True, size=14, color=COUL_ENTETE)
+        ws.cell(1, 4, identifiant).font = Font(bold=True, size=12)
         ws.cell(2, 2, "Adresse :").font = Font(bold=True)
         ws.cell(2, 4, "=" + _ref("Locataires", f"${lettre_loc['adresse']}${rloc}"))
 
-        # En-têtes du tableau.
         for c in cols:
             i = col_de[c["key"]]
             style_entete(ws.cell(PL_LIGNE_ENTETE, i, c["titre"]))
@@ -422,58 +467,76 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
         def refloc(field: str) -> str:
             return "=" + _ref("Locataires", f"${lettre_loc[field]}${rloc}")
 
+        # Mois groupés par année (pour insérer un total + une ligne vide entre les années).
+        par_annee: dict = {}
+        for (annee, m) in _mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"]):
+            par_annee.setdefault(annee, []).append(m)
+
         rows_map: dict = {}
         r = PL_LIGNE_ENTETE + 1
-        for (annee, m) in _mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"]):
-            nom_mois = MOIS[m - 1]
-            preserve = saisies.get((str(nom), int(annee), nom_mois), {})
-            for c in cols:
-                key = c["key"]
-                cell = ws.cell(r, col_de[key])
-                if key == "locataire":
-                    cell.value = nom
-                elif key == "annee":
-                    cell.value = annee
-                elif key == "mois":
-                    cell.value = nom_mois
-                elif c["kind"] == "ref":
-                    cell.value = refloc(c["src"])
-                elif key == "total_du" and split:
-                    cell.value = f"={L['loyer_nu_du']}{r}+{L['charges_du']}{r}"
-                elif key == "rac_attendu":
-                    cell.value = (f"={L['total_du']}{r}-{L['caf_attendu']}{r}" if caf
-                                  else f"={L['total_du']}{r}")
-                elif key == "total_recu":
-                    cell.value = (f"={L['caf_recu']}{r}+{L['loc_recu']}{r}" if caf
-                                  else f"={L['loc_recu']}{r}")
-                elif key == "ecart":
-                    cell.value = f"={L['total_recu']}{r}-{L['total_du']}{r}"
-                elif key == "statut":
-                    tr, ec = f"{L['total_recu']}{r}", f"{L['ecart']}{r}"
-                    cell.value = (f'=IF({tr}=0,"À encaisser",'
-                                  f'IF(ABS({ec})<=0.005,"Soldé",'
-                                  f'IF({ec}>0,"Trop-perçu","Partiel")))')
-                elif key in COLS_SAISIE and key in preserve:
-                    cell.value = preserve[key]
-                style_cellule(cell, fmt=c.get("fmt"),
-                              saisie=c["kind"] == "input",
-                              calc=c["kind"] in ("calc", "ref"))
-            rows_map[(annee, m)] = r
-            r += 1
+        for annee in sorted(par_annee):
+            y0 = r
+            for m in par_annee[annee]:
+                nom_mois = MOIS[m - 1]
+                preserve = saisies.get((ident_complet, int(annee), nom_mois), {})
+                for c in cols:
+                    key = c["key"]
+                    cell = ws.cell(r, col_de[key])
+                    if key == "locataire":
+                        cell.value = ident_complet
+                    elif key == "annee":
+                        cell.value = annee
+                    elif key == "mois":
+                        cell.value = nom_mois
+                    elif c["kind"] == "ref":
+                        cell.value = refloc(c["src"])
+                    elif key == "total_du" and split:
+                        cell.value = f"={L['loyer_nu_du']}{r}+{L['charges_du']}{r}"
+                    elif key == "rac_attendu":
+                        cell.value = (f"={L['total_du']}{r}-{L['caf_attendu']}{r}" if caf
+                                      else f"={L['total_du']}{r}")
+                    elif key == "total_recu":
+                        cell.value = (f"={L['caf_recu']}{r}+{L['loc_recu']}{r}" if caf
+                                      else f"={L['loc_recu']}{r}")
+                    elif key == "ecart":
+                        cell.value = f"={L['total_recu']}{r}-{L['total_du']}{r}"
+                    elif key == "statut":
+                        tr, ec = f"{L['total_recu']}{r}", f"{L['ecart']}{r}"
+                        cell.value = (f'=IF({tr}=0,"À encaisser",'
+                                      f'IF(ABS({ec})<=0.005,"Soldé",'
+                                      f'IF({ec}>0,"Trop-perçu","Partiel")))')
+                    elif key in COLS_SAISIE and key in preserve:
+                        cell.value = preserve[key]
+                    style_cellule(cell, fmt=c.get("fmt"),
+                                  saisie=c["kind"] == "input",
+                                  calc=c["kind"] in ("calc", "ref"))
+                rows_map[(annee, m)] = r
+                r += 1
 
-        derniere = r - 1
-        if derniere >= PL_LIGNE_ENTETE + 1:
-            plage_statut = f"{L['statut']}{PL_LIGNE_ENTETE + 1}:{L['statut']}{derniere}"
+            # Ligne « Total <année> ».
+            tot = ws.cell(r, col_de["mois"], f"Total {annee}")
+            tot.font = Font(bold=True)
+            for key in cols_total:
+                cc = ws.cell(r, col_de[key], f"=SUM({L[key]}{y0}:{L[key]}{r - 1})")
+                cc.number_format = FMT_EURO
+                cc.font = Font(bold=True)
+                cc.border = BORDURE
+            r += 2  # total + une ligne vide de séparation
+
+        der = r - 1
+        if rows_map:
+            premier = PL_LIGNE_ENTETE + 1
+            plage_statut = f"{L['statut']}{premier}:{L['statut']}{der}"
             for texte, couleur in (("Soldé", COUL_SOLDE), ("Trop-perçu", COUL_TROP),
                                    ("Partiel", COUL_PARTIEL), ("À encaisser", COUL_ATTENTE)):
                 ws.conditional_formatting.add(
                     plage_statut,
-                    FormulaRule(formula=[f'${L["statut"]}{PL_LIGNE_ENTETE + 1}="{texte}"'],
-                                fill=PatternFill("solid", fgColor=couleur)))
+                    FormulaRule(formula=[f'${L["statut"]}{premier}="{texte}"'],
+                                fill=_fill_cf(couleur)))
         ws.freeze_panes = ws.cell(PL_LIGNE_ENTETE + 1, 4).coordinate
 
-        infos.append({"loc": loc, "nom": nom, "feuille": feuille, "cols": L,
-                      "rows": rows_map})
+        infos.append({"loc": loc, "nom": ident_complet, "feuille": feuille,
+                      "cols": L, "rows": rows_map})
 
     return infos
 
@@ -555,7 +618,7 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 
     for r, loc in enumerate(locs, start=2):
         nomc = f"${B['nom']}{r}"
-        ws.cell(r, 1, loc.get("nom"))
+        ws.cell(r, 1, _identite(loc))
         ws.cell(r, pos["du"], f"=SUMIFS(Suivi_TotalDu,Suivi_Locataire,{nomc})")
         ws.cell(r, pos["recu"], f"=SUMIFS(Suivi_TotalRecu,Suivi_Locataire,{nomc})")
         if caf:
@@ -585,9 +648,9 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 
     plage_solde = f"{B['solde']}2:{B['solde']}{der}"
     ws.conditional_formatting.add(plage_solde, FormulaRule(
-        formula=[f"${B['solde']}2<-0.005"], fill=PatternFill("solid", fgColor=COUL_PARTIEL)))
+        formula=[f"${B['solde']}2<-0.005"], fill=_fill_cf(COUL_PARTIEL)))
     ws.conditional_formatting.add(plage_solde, FormulaRule(
-        formula=[f"${B['solde']}2>0.005"], fill=PatternFill("solid", fgColor=COUL_TROP)))
+        formula=[f"${B['solde']}2>0.005"], fill=_fill_cf(COUL_TROP)))
     ws.freeze_panes = "A2"
 
 
@@ -651,7 +714,7 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
     annee_def = annees[1] if len(annees) > 1 else annees[0]
     r = rs + 1
     for loc_index, loc in enumerate(cfg["locataires"]):
-        nom = loc.get("nom")
+        nom = _identite(loc)
         rloc = loc_index + 2
         pre = rev.get(str(nom), {})
         ws.cell(r, 1, nom).border = BORDURE
@@ -736,7 +799,7 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     titre.alignment = Alignment(horizontal="center")
 
     # Sélecteurs.
-    ws["B4"], ws["C4"] = "Locataire :", cfg["locataires"][0]["nom"]
+    ws["B4"], ws["C4"] = "Locataire :", _identite(cfg["locataires"][0])
     ws["B5"], ws["C5"] = "Mois :", MOIS[0]
     ws["D5"], ws["E5"] = "Année :", annees[0]
     for lab in ("B4", "B5", "D5"):
@@ -869,7 +932,7 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
 
     r = 2
     for loc in cfg["locataires"]:
-        nom = loc.get("nom")
+        nom = _identite(loc)
         annees = sorted({a for (a, _) in _mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"])})
         for annee in annees:
             ws.cell(r, 1, nom).border = BORDURE
@@ -895,9 +958,9 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
     der = r - 1
     if der >= 2:
         ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
-            formula=["$E2<-0.005"], fill=PatternFill("solid", fgColor=COUL_PARTIEL)))
+            formula=["$E2<-0.005"], fill=_fill_cf(COUL_PARTIEL)))
         ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
-            formula=["$E2>0.005"], fill=PatternFill("solid", fgColor=COUL_TROP)))
+            formula=["$E2>0.005"], fill=_fill_cf(COUL_TROP)))
     ws.freeze_panes = "A2"
 
 

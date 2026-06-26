@@ -19,6 +19,9 @@ echo [3/3] Generation de l'executable...
 pyinstaller --onefile --windowed --noconfirm --clean ^
   --name SuiviLoyers ^
   --collect-submodules openpyxl ^
+  --collect-all tkcalendar ^
+  --collect-all babel ^
+  --hidden-import babel.numbers ^
   interface.py || goto :erreur
 
 echo.
