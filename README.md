@@ -42,6 +42,14 @@ bilan) se calcule automatiquement. Ne touchez pas aux cases bleutées.
 | Partiel | rouge | Reçu inférieur au dû (impayé partiel). |
 | À encaisser | gris | Aucun paiement saisi pour ce mois. |
 
+### Éditer une quittance de loyer
+
+Si l'option *quittance* est activée, le classeur a un onglet **Quittance**. Choisissez le
+**locataire**, le **mois** et l'**année** dans les trois listes déroulantes : le document se
+remplit seul (montants, date de paiement, texte de quittance) et s'imprime. Quand le loyer
+n'est pas réglé en entier pour la période, le document le signale et vaut reçu du montant
+versé, pas quittance.
+
 ### Changer de locataire plus tard
 
 Les locataires changent souvent : c'est prévu. Relancez `SuiviLoyers.exe`, cliquez sur

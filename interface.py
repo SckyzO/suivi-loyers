@@ -181,12 +181,15 @@ class Application(tk.Tk):
         self.var_split = tk.BooleanVar(value=True)
         self.var_caf = tk.BooleanVar(value=True)
         self.var_depot = tk.BooleanVar(value=True)
+        self.var_quittances = tk.BooleanVar(value=True)
         ttk.Checkbutton(mf, text="Séparer loyer nu / charges",
                         variable=self.var_split).pack(anchor="w", padx=8, pady=2)
         ttk.Checkbutton(mf, text="Suivre la part CAF (tiers payant)",
                         variable=self.var_caf).pack(anchor="w", padx=8, pady=2)
         ttk.Checkbutton(mf, text="Suivre le dépôt de garantie",
                         variable=self.var_depot).pack(anchor="w", padx=8, pady=2)
+        ttk.Checkbutton(mf, text="Générer un onglet quittance de loyer",
+                        variable=self.var_quittances).pack(anchor="w", padx=8, pady=2)
 
         # ----- Locataires -----
         lf = ttk.LabelFrame(self, text="Locataires", style="Section.TLabelframe")
@@ -225,7 +228,7 @@ class Application(tk.Tk):
 
     def _modules(self) -> dict:
         return {"loyer_nu_charges": self.var_split.get(), "caf": self.var_caf.get(),
-                "depot_garantie": self.var_depot.get()}
+                "depot_garantie": self.var_depot.get(), "quittances": self.var_quittances.get()}
 
     def _rafraichir_tree(self) -> None:
         self.tree.delete(*self.tree.get_children())
@@ -293,6 +296,7 @@ class Application(tk.Tk):
         self.var_split.set(bool(m.get("loyer_nu_charges", True)))
         self.var_caf.set(bool(m.get("caf", True)))
         self.var_depot.set(bool(m.get("depot_garantie", True)))
+        self.var_quittances.set(bool(m.get("quittances", True)))
         self.locataires = list(cfg.get("locataires", []))
         self._rafraichir_tree()
 

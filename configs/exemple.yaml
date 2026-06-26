@@ -15,6 +15,7 @@ modules:
   loyer_nu_charges: true   # sépare loyer nu / provision charges
   caf: true                # colonnes part CAF (tiers payant)
   depot_garantie: true
+  quittances: true         # onglet quittance de loyer interactif
 
 locataires:
   - nom: "Martin Sophie"

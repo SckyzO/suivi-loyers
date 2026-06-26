@@ -386,9 +386,15 @@ def construire_suivi(wb: Workbook, cfg: dict, ref_loc: dict, saisies: dict | Non
             nom_plage, attr_text=f"Suivi!${col}$2:${col}${derniere}"))
 
     nommer("Suivi_Locataire", "locataire")
+    nommer("Suivi_Annee", "annee")
+    nommer("Suivi_Mois", "mois")
     nommer("Suivi_TotalDu", "total_du")
     nommer("Suivi_TotalRecu", "total_recu")
     nommer("Suivi_LocRecu", "loc_recu")
+    nommer("Suivi_LocDate", "loc_date")
+    if split:
+        nommer("Suivi_LoyerNuDu", "loyer_nu_du")
+        nommer("Suivi_ChargesDu", "charges_du")
     if caf:
         nommer("Suivi_CAFRecue", "caf_recu")
 
@@ -464,6 +470,114 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Onglet Quittance (modèle interactif rempli par formules)
+# --------------------------------------------------------------------------- #
+
+def construire_quittance(wb: Workbook, cfg: dict, ref_loc: dict) -> None:
+    mod = cfg["modules"]
+    split, caf = mod["loyer_nu_charges"], mod["caf"]
+    idx_bien = ref_loc["idx"]["bien"]
+    annees = list(range(cfg["annee_debut"], cfg["annee_fin"] + 1))
+
+    ws = wb.create_sheet("Quittance")
+    ws.sheet_view.showGridLines = False
+    for col, w in (("A", 3), ("B", 26), ("C", 26), ("D", 16), ("E", 16)):
+        ws.column_dimensions[col].width = w
+
+    ws.merge_cells("B2:E2")
+    titre = ws["B2"]
+    titre.value = "QUITTANCE DE LOYER"
+    titre.font = Font(bold=True, size=18, color=COUL_ENTETE)
+    titre.alignment = Alignment(horizontal="center")
+
+    # Sélecteurs (cellules jaunes = à choisir).
+    ws["B4"], ws["C4"] = "Locataire :", cfg["locataires"][0]["nom"]
+    ws["B5"], ws["C5"] = "Mois :", MOIS[0]
+    ws["D5"], ws["E5"] = "Année :", annees[0]
+    for lab in ("B4", "B5", "D5"):
+        ws[lab].font = Font(bold=True)
+    for sel in ("C4", "C5", "E5"):
+        ws[sel].fill = PatternFill("solid", fgColor=COUL_SAISIE)
+        ws[sel].border = BORDURE
+
+    def valider(cellule: str, formule: str) -> None:
+        dv = DataValidation(type="list", formula1=formule, allow_blank=False)
+        dv.add(cellule)
+        ws.add_data_validation(dv)
+
+    valider("C4", "=LocatairesListe")
+    valider("C5", '"%s"' % ",".join(MOIS))
+    valider("E5", '"%s"' % ",".join(str(a) for a in annees))
+
+    b = cfg["bailleur"]
+    ws["B7"] = "Bailleur :"
+    ws["B7"].font = Font(bold=True)
+    ws["C7"] = b.get("nom", "")
+    infos = " · ".join(str(b[k]) for k in ("adresse", "tel", "email") if b.get(k))
+    if infos:
+        ws["C8"] = infos
+
+    # Critères communs des SUMIFS (une seule ligne correspond par locataire/mois/année).
+    crit = "Suivi_Locataire,$C$4,Suivi_Annee,$E$5,Suivi_Mois,$C$5"
+
+    def sif(plage: str) -> str:
+        return f"=SUMIFS({plage},{crit})"
+
+    lignes = []
+    if split:
+        lignes += [("Loyer nu", sif("Suivi_LoyerNuDu")),
+                   ("Charges", sif("Suivi_ChargesDu"))]
+    lignes.append(("Total loyer + charges dû", sif("Suivi_TotalDu")))
+    if caf:
+        lignes += [("Dont part CAF reçue", sif("Suivi_CAFRecue")),
+                   ("Dont part locataire reçue", sif("Suivi_LocRecu"))]
+    lignes.append(("Montant total reçu", sif("Suivi_TotalRecu")))
+
+    r0 = 10
+    montant_row = r0
+    for i, (label, formule) in enumerate(lignes):
+        r = r0 + i
+        gras = label.startswith("Montant total")
+        ws.cell(r, 2, label).font = Font(bold=gras)
+        cell = ws.cell(r, 3, formule)
+        cell.number_format = FMT_EURO
+        cell.border = BORDURE
+        if gras:
+            montant_row = r
+
+    r_date = r0 + len(lignes)
+    ws.cell(r_date, 2, "Date de paiement").font = Font(bold=True)
+    cd = ws.cell(r_date, 3,
+                 f'=IF(SUMIFS(Suivi_TotalRecu,{crit})=0,"",SUMIFS(Suivi_LocDate,{crit}))')
+    cd.number_format = FMT_DATE
+    cd.border = BORDURE
+
+    r_val = r_date + 2
+    ws.merge_cells(start_row=r_val, start_column=2, end_row=r_val, end_column=5)
+    val = ws.cell(r_val, 2,
+                  f'=IF(SUMIFS(Suivi_TotalRecu,{crit})>=SUMIFS(Suivi_TotalDu,{crit}),'
+                  f'"Loyer intégralement réglé : quittance valable.",'
+                  f'"Paiement partiel : ce document vaut reçu pour le montant versé, '
+                  f'non quittance.")')
+    val.font = Font(italic=True)
+
+    r_corps = r_val + 2
+    ws.merge_cells(start_row=r_corps, start_column=2, end_row=r_corps + 2, end_column=5)
+    corps = ws.cell(r_corps, 2,
+                    f'="Je soussigné(e) "&$C$7&", bailleur du logement situé "'
+                    f'&IFERROR(VLOOKUP($C$4,RefLocataires,{idx_bien},FALSE),"")'
+                    f'&", déclare avoir reçu de "&$C$4&" la somme de "'
+                    f'&TEXT($C${montant_row},"0.00")&" € au titre du loyer et des charges '
+                    f'pour la période de "&$C$5&" "&$E$5'
+                    f'&", et lui en donne quittance, sous réserve de tous mes droits."')
+    corps.alignment = Alignment(wrap_text=True, vertical="top")
+
+    r_pied = r_corps + 4
+    ws.cell(r_pied, 2, "Fait à ……………………………, le ……………………………")
+    ws.cell(r_pied + 2, 2, "Signature du bailleur :").font = Font(bold=True)
+
+
+# --------------------------------------------------------------------------- #
 # Onglet Guide
 # --------------------------------------------------------------------------- #
 
@@ -529,7 +643,7 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         ("loyer_nu_charges", "Loyer nu / charges séparés"),
         ("caf", "Suivi de la part CAF (tiers payant)"),
         ("depot_garantie", "Dépôt de garantie"),
-        ("quittances", "Quittances (à venir)"),
+        ("quittances", "Quittances"),
         ("irl", "Révision IRL (à venir)"),
         ("regularisation_charges", "Régularisation des charges (à venir)"),
     ):
@@ -612,6 +726,8 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     ref_loc = construire_locataires(wb, cfg)
     construire_suivi(wb, cfg, ref_loc, saisies=saisies)
     construire_bilan(wb, cfg)
+    if cfg["modules"].get("quittances"):
+        construire_quittance(wb, cfg, ref_loc)
     construire_guide(wb, cfg)
 
     sortie.parent.mkdir(parents=True, exist_ok=True)

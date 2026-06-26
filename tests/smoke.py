@@ -15,7 +15,8 @@ import generer_suivi_loyers as g
 CFG_COMPLET = {
     "bailleur": {"nom": "Smoke Complet"},
     "periode": {"annee_debut": 2024, "annee_fin": 2025},
-    "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True},
+    "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True,
+                "quittances": True},
     "locataires": [
         {"nom": "A", "bien": "L1", "loyer_nu": 500, "charges": 50, "part_caf": 200,
          "depot_garantie": 500, "date_entree": "2024-01-01"},
@@ -48,7 +49,8 @@ def main() -> int:
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
     ws = wb["Suivi"]
-    assert wb.sheetnames == ["Guide", "Locataires", "Suivi", "Bilan"], wb.sheetnames
+    assert wb.sheetnames == ["Guide", "Locataires", "Suivi", "Bilan", "Quittance"], wb.sheetnames
+    assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
     cols = entetes(ws)
     assert "CAF reçue" in cols and "Charges dues" in cols, cols
     cmap = colonnes_map(ws)
@@ -59,9 +61,11 @@ def main() -> int:
     # 2) Bailleur minimal : aucune colonne CAF, libellé « Loyer dû ».
     f2 = tmp / "minimal.xlsx"
     g.generer_workbook(g.valider_config(CFG_MINIMAL), f2)
-    cols2 = entetes(load_workbook(f2)["Suivi"])
+    wb2 = load_workbook(f2)
+    cols2 = entetes(wb2["Suivi"])
     assert not any("CAF" in (c or "") for c in cols2), cols2
     assert "Loyer dû" in cols2, cols2
+    assert "Quittance" not in wb2.sheetnames, wb2.sheetnames
 
     # 3) Préservation des saisies : on saisit, on régénère avec un locataire en plus.
     wb = load_workbook(f1)

@@ -65,6 +65,9 @@ toujours de la dernière version côté Windows.
 
 ## Reste à faire (phase 2)
 
-Modules câblés dans la config mais inactifs (défaut `false`) : `quittances`, `irl`,
+Modules câblés dans la config mais encore inactifs (défaut `false`) : `irl`,
 `regularisation_charges`. Le module IRL devra introduire une table loyer-par-année (le montant
 attendu suit aujourd'hui la valeur courante de la fiche locataire).
+
+Le module `quittances` est implémenté (`construire_quittance`) : onglet interactif rempli par
+`SUMIFS` sur les plages nommées du Suivi (`Suivi_Annee`, `Suivi_Mois`, `Suivi_LocDate`, etc.).
