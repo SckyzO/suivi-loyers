@@ -9,10 +9,11 @@ periode:
   annee_fin: 2025
 
 modules:
-  loyer_nu_charges: false
+  mode_charges: sans
   caf: false
   depot_garantie: false
   documents: false
+  tableau_bord: true
 
 locataires:
   - nom: "Lefevre"

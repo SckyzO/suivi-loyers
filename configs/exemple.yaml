@@ -12,10 +12,11 @@ periode:
   annee_fin: 2026
 
 modules:
-  loyer_nu_charges: true
+  mode_charges: comprises   # comprises | separees | sans
   caf: true
   depot_garantie: true
   documents: true
+  tableau_bord: true
   regularisation_charges: true
   irl: true
 
@@ -30,8 +31,8 @@ locataires:
     charges: 50
     part_caf: 210
     depot_garantie: 480
-    date_entree: 2024-01-01
-    date_sortie: 2025-06-30
+    date_entree: 2024-01-05   # mois d'entrée partiel -> prorata
+    date_sortie: 2025-06-15   # mois de sortie partiel -> prorata
     caution_rendue: false
     observation: "Loyer impayé"
 

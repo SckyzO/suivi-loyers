@@ -33,6 +33,12 @@ ANNEE = dt.date.today().year
 TYPES_BIEN = moteur.TYPES_BIEN
 OBSERVATIONS = moteur.OBSERVATIONS
 
+MODES = [("comprises", "Loyer charges comprises"),
+         ("separees", "Loyer + charges séparés"),
+         ("sans", "Loyer seul (sans charges)")]
+MODE_KEY = {lbl: k for k, lbl in MODES}
+MODE_LABEL = {k: lbl for k, lbl in MODES}
+
 
 def _parse_nombre(txt: str) -> float:
     txt = (txt or "").strip().replace(",", ".").replace("€", "").replace(" ", "")
@@ -311,20 +317,27 @@ class Application(tk.Tk):
 
         mf = ttk.LabelFrame(pm, text="Options à inclure", style="Section.TLabelframe")
         mf.pack(side="left", fill="both", expand=True, padx=(10, 0))
-        self.var_split = tk.BooleanVar(value=True)
         self.var_caf = tk.BooleanVar(value=True)
         self.var_depot = tk.BooleanVar(value=True)
         self.var_documents = tk.BooleanVar(value=True)
         self.var_regul = tk.BooleanVar(value=True)
         self.var_irl = tk.BooleanVar(value=True)
-        ttk.Checkbutton(mf, text="Séparer loyer nu / charges",
-                        variable=self.var_split).pack(anchor="w", padx=8, pady=1)
+        self.var_tableau = tk.BooleanVar(value=True)
+        self.var_mode = tk.StringVar(value=MODE_LABEL["comprises"])
+
+        frm = ttk.Frame(mf)
+        frm.pack(anchor="w", padx=8, pady=2, fill="x")
+        ttk.Label(frm, text="Loyer / charges :").pack(side="left")
+        ttk.Combobox(frm, textvariable=self.var_mode, values=[lbl for _, lbl in MODES],
+                     state="readonly", width=26).pack(side="left", padx=4)
         ttk.Checkbutton(mf, text="Suivre la part CAF (tiers payant)",
                         variable=self.var_caf).pack(anchor="w", padx=8, pady=1)
         ttk.Checkbutton(mf, text="Suivre le dépôt de garantie",
                         variable=self.var_depot).pack(anchor="w", padx=8, pady=1)
         ttk.Checkbutton(mf, text="Documents à imprimer (quittance, avis, relance)",
                         variable=self.var_documents).pack(anchor="w", padx=8, pady=1)
+        ttk.Checkbutton(mf, text="Tableau de bord (graphiques)",
+                        variable=self.var_tableau).pack(anchor="w", padx=8, pady=1)
         ttk.Checkbutton(mf, text="Régularisation annuelle des charges",
                         variable=self.var_regul).pack(anchor="w", padx=8, pady=1)
         ttk.Checkbutton(mf, text="Révision IRL (calcul du loyer révisé)",
@@ -372,8 +385,9 @@ class Application(tk.Tk):
             raise ValueError(f"{label} invalide (saisissez une année).")
 
     def _modules(self) -> dict:
-        return {"loyer_nu_charges": self.var_split.get(), "caf": self.var_caf.get(),
-                "depot_garantie": self.var_depot.get(), "documents": self.var_documents.get(),
+        return {"mode_charges": MODE_KEY.get(self.var_mode.get(), "comprises"),
+                "caf": self.var_caf.get(), "depot_garantie": self.var_depot.get(),
+                "documents": self.var_documents.get(), "tableau_bord": self.var_tableau.get(),
                 "regularisation_charges": self.var_regul.get(), "irl": self.var_irl.get()}
 
     def _adresses(self) -> list[str]:
@@ -454,10 +468,14 @@ class Application(tk.Tk):
         self.var_debut.set(int(p.get("annee_debut", ANNEE)))
         self.var_fin.set(int(p.get("annee_fin", ANNEE)))
         m = cfg.get("modules", {})
-        self.var_split.set(bool(m.get("loyer_nu_charges", True)))
+        mode = m.get("mode_charges")
+        if mode not in MODE_LABEL:
+            mode = "separees" if m.get("loyer_nu_charges", True) else "sans"
+        self.var_mode.set(MODE_LABEL[mode])
         self.var_caf.set(bool(m.get("caf", True)))
         self.var_depot.set(bool(m.get("depot_garantie", True)))
         self.var_documents.set(bool(m.get("documents", m.get("quittances", True))))
+        self.var_tableau.set(bool(m.get("tableau_bord", True)))
         self.var_regul.set(bool(m.get("regularisation_charges", True)))
         self.var_irl.set(bool(m.get("irl", True)))
         self.locataires = list(cfg.get("locataires", []))

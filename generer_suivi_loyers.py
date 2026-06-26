@@ -29,6 +29,7 @@ import sys
 import re
 import math
 import shutil
+import calendar
 import datetime as dt
 from pathlib import Path
 
@@ -43,6 +44,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.workbook.defined_name import DefinedName
+from openpyxl.chart import BarChart, Reference
 
 # --------------------------------------------------------------------------- #
 # Constantes
@@ -75,8 +77,9 @@ TYPES_BIEN = ["Appartement", "Maison"]
 COLS_SAISIE = ("caf_recu", "caf_date", "loc_recu", "loc_date")
 
 # Feuilles « système » (tout le reste = une feuille locataire).
-FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan", "Régularisation charges",
-                    "Révision IRL", "Quittance", "Avis d'échéance", "Lettre de relance"}
+FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan", "Tableau de bord",
+                    "Régularisation charges", "Révision IRL",
+                    "Quittance", "Avis d'échéance", "Lettre de relance"}
 
 TRIMESTRES = ["T1", "T2", "T3", "T4"]
 
@@ -88,13 +91,26 @@ OBSERVATIONS = [
 ]
 
 MODULES_DEFAUT = {
-    "loyer_nu_charges": True,
+    "mode_charges": "comprises",     # "comprises" | "separees" | "sans"
+    "loyer_nu_charges": True,        # déprécié (rétro-compat) : mappé vers mode_charges
     "caf": True,
     "depot_garantie": True,
     "documents": True,               # quittance + avis d'échéance + lettre de relance
-    "irl": False,                    # phase 2
-    "regularisation_charges": False,  # phase 2
+    "tableau_bord": True,            # onglet de graphiques
+    "irl": False,
+    "regularisation_charges": False,
 }
+
+MODES_CHARGES = ["comprises", "separees", "sans"]
+
+
+def _flags_charges(cfg: dict):
+    """(a_charges, charges_separees, mode) à partir du mode de charges du bailleur."""
+    m = cfg["modules"]
+    mode = m.get("mode_charges")
+    if mode not in MODES_CHARGES:
+        mode = "separees" if m.get("loyer_nu_charges", True) else "sans"
+    return mode in ("comprises", "separees"), mode == "separees", mode
 
 # Version du schéma de config. Incrémenter quand un changement nécessite une migration ;
 # migrer_config() doit alors gérer la transition depuis les versions antérieures.
@@ -138,6 +154,9 @@ def migrer_config(raw: dict) -> tuple[dict, list[str]]:
             avertis.append(f"Module inconnu ignoré : « {k} ».")
             continue
         modules[kl] = v
+    # Rétro-compat : ancien booléen loyer_nu_charges -> mode_charges.
+    if "mode_charges" not in modules and "loyer_nu_charges" in modules:
+        modules["mode_charges"] = "separees" if modules["loyer_nu_charges"] else "sans"
     cfg["modules"] = modules
 
     locataires = []
@@ -261,6 +280,24 @@ def _mois_actifs(loc: dict, annee_debut: int, annee_fin: int) -> list[tuple[int,
             for m in range(1, 13) if debut <= (a, m) <= fin]
 
 
+def _prorata_suffixe(loc: dict, annee: int, mois: int) -> str:
+    """Suffixe de formule « *jours/jours_du_mois » pour un mois d'entrée/sortie partiel.
+
+    Vide si mois plein. Jours réels du mois (gère février et les mois de 31 jours).
+    """
+    de, ds = _date(loc.get("date_entree")), _date(loc.get("date_sortie"))
+    nb = calendar.monthrange(annee, mois)[1]
+    premier, dernier = 1, nb
+    if de and (de.year, de.month) == (annee, mois):
+        premier = de.day
+    if ds and (ds.year, ds.month) == (annee, mois):
+        dernier = ds.day
+    jours = dernier - premier + 1
+    if jours <= 0 or jours >= nb:
+        return ""
+    return f"*{jours}/{nb}"
+
+
 def _slug(nom: str) -> str:
     s = re.sub(r"[^\w\-]+", "_", nom.strip(), flags=re.UNICODE)
     return s.strip("_") or "bailleur"
@@ -373,7 +410,8 @@ def style_cellule(cell, *, saisie=False, calc=False, fmt=None) -> None:
 
 def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     mod = cfg["modules"]
-    split, caf, depot = mod["loyer_nu_charges"], mod["caf"], mod["depot_garantie"]
+    split, _csep, _mode = _flags_charges(cfg)
+    caf, depot = mod["caf"], mod["depot_garantie"]
 
     ws = wb.create_sheet("Locataires")
 
@@ -482,19 +520,22 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
 # Une feuille de saisie par locataire
 # --------------------------------------------------------------------------- #
 
-def _colonnes_locataire(split: bool, caf: bool) -> list[dict]:
+def _colonnes_locataire(a_charges: bool, charges_sep: bool, mode: str, caf: bool) -> list[dict]:
     cols = [
         {"key": "locataire", "titre": "Locataire", "w": 20, "kind": "meta", "cache": True},
         {"key": "annee", "titre": "Année", "w": 8, "kind": "meta", "fmt": "0"},
         {"key": "mois", "titre": "Mois", "w": 11, "kind": "meta"},
     ]
-    if split:
+    if a_charges:
+        # En mode « charges comprises », loyer nu et charges restent calculés mais masqués.
         cols += [
             {"key": "loyer_nu_du", "titre": "Loyer nu dû", "w": 12, "kind": "ref",
-             "src": "loyer_nu", "fmt": FMT_EURO},
+             "src": "loyer_nu", "fmt": FMT_EURO, "cache": not charges_sep},
             {"key": "charges_du", "titre": "Charges dues", "w": 12, "kind": "ref",
-             "src": "charges", "fmt": FMT_EURO},
-            {"key": "total_du", "titre": "Total dû", "w": 12, "kind": "calc", "fmt": FMT_EURO},
+             "src": "charges", "fmt": FMT_EURO, "cache": not charges_sep},
+            {"key": "total_du",
+             "titre": "Loyer (charges comprises)" if mode == "comprises" else "Total dû",
+             "w": 18 if mode == "comprises" else 12, "kind": "calc", "fmt": FMT_EURO},
         ]
     else:
         cols.append({"key": "total_du", "titre": "Loyer dû", "w": 12, "kind": "ref",
@@ -526,9 +567,10 @@ PL_LIGNE_ENTETE = 4
 def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                                    saisies: dict) -> list[dict]:
     mod = cfg["modules"]
-    split, caf = mod["loyer_nu_charges"], mod["caf"]
+    split, charges_sep, mode = _flags_charges(cfg)
+    caf = mod["caf"]
     lettre_loc = ref_loc["lettre"]
-    cols = _colonnes_locataire(split, caf)
+    cols = _colonnes_locataire(split, charges_sep, mode, caf)
     L = {c["key"]: get_column_letter(i) for i, c in enumerate(cols, 1)}
     col_de = {c["key"]: i for i, c in enumerate(cols, 1)}
 
@@ -576,6 +618,7 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
             for m in par_annee[annee]:
                 nom_mois = MOIS[m - 1]
                 preserve = saisies.get((ident_complet, int(annee), nom_mois), {})
+                sfx = _prorata_suffixe(loc, annee, m)
                 for c in cols:
                     key = c["key"]
                     cell = ws.cell(r, col_de[key])
@@ -587,7 +630,9 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                     elif key == "mois":
                         cell.value = nom_mois
                     elif c["kind"] == "ref":
-                        cell.value = refloc(c["src"])
+                        # Prorata appliqué au loyer / charges (pas à la CAF, qui se calcule à part).
+                        sf = sfx if c["src"] in ("loyer_nu", "charges", "loyer_total") else ""
+                        cell.value = refloc(c["src"]) + sf
                     elif key == "total_du" and split:
                         cell.value = f"={L['loyer_nu_du']}{r}+{L['charges_du']}{r}"
                     elif key == "rac_attendu":
@@ -647,7 +692,8 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
 
 def construire_donnees(wb: Workbook, cfg: dict, feuilles: list[dict]) -> None:
     mod = cfg["modules"]
-    split, caf = mod["loyer_nu_charges"], mod["caf"]
+    split, _csep, _mode = _flags_charges(cfg)
+    caf = mod["caf"]
 
     cols = ["locataire", "annee", "mois"]
     if split:
@@ -761,9 +807,9 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) -> None:
     if not cfg["modules"].get("irl"):
         return
-    split = cfg["modules"]["loyer_nu_charges"]
+    a_charges, _csep, _mode = _flags_charges(cfg)
     lettre_loc = ref_loc["lettre"]
-    loyer_field = "loyer_nu" if split else "loyer_total"
+    loyer_field = "loyer_nu" if a_charges else "loyer_total"
     annees = list(range(cfg["annee_debut"], cfg["annee_fin"] + 1))
 
     ws = wb.create_sheet("Révision IRL")
@@ -855,12 +901,67 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
 
 
 # --------------------------------------------------------------------------- #
+# Onglet Tableau de bord (graphiques)
+# --------------------------------------------------------------------------- #
+
+def construire_tableau_bord(wb: Workbook, cfg: dict) -> None:
+    if not cfg["modules"].get("tableau_bord", True) or "Bilan" not in wb.sheetnames:
+        return
+    caf = cfg["modules"]["caf"]
+    n = len(cfg["locataires"])
+    if n == 0:
+        return
+    fin = n + 1  # dernière ligne locataire dans Bilan (ligne 1 = en-têtes)
+
+    keys = ["nom", "du", "recu"] + (["caf", "loc"] if caf else []) + ["solde", "taux"]
+    pos = {k: i for i, k in enumerate(keys, 1)}
+    bilan = wb["Bilan"]
+
+    ws = wb.create_sheet("Tableau de bord")
+    ws.sheet_view.showGridLines = False
+    ws.cell(1, 1, "TABLEAU DE BORD").font = Font(bold=True, size=16, color=COUL_ENTETE)
+
+    cats = Reference(bilan, min_col=pos["nom"], min_row=2, max_row=fin)
+
+    g1 = BarChart()
+    g1.type = "col"
+    g1.title = "Loyers : dû vs reçu par locataire"
+    g1.height, g1.width = 8, 16
+    d1 = Reference(bilan, min_col=pos["du"], max_col=pos["recu"], min_row=1, max_row=fin)
+    g1.add_data(d1, titles_from_data=True)
+    g1.set_categories(cats)
+    ws.add_chart(g1, "B3")
+
+    g2 = BarChart()
+    g2.type = "bar"
+    g2.title = "Taux de recouvrement par locataire"
+    g2.height, g2.width = 8, 16
+    d2 = Reference(bilan, min_col=pos["taux"], min_row=1, max_row=fin)
+    g2.add_data(d2, titles_from_data=True)
+    g2.set_categories(cats)
+    ws.add_chart(g2, "B20")
+
+    if caf:
+        g3 = BarChart()
+        g3.type = "col"
+        g3.grouping = "stacked"
+        g3.overlap = 100
+        g3.title = "Répartition encaissé : CAF / locataire"
+        g3.height, g3.width = 8, 16
+        d3 = Reference(bilan, min_col=pos["caf"], max_col=pos["loc"], min_row=1, max_row=fin)
+        g3.add_data(d3, titles_from_data=True)
+        g3.set_categories(cats)
+        ws.add_chart(g3, "B37")
+
+
+# --------------------------------------------------------------------------- #
 # Documents à imprimer (quittance, avis d'échéance, lettre de relance)
 # --------------------------------------------------------------------------- #
 
 def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> None:
     mod = cfg["modules"]
-    split, caf = mod["loyer_nu_charges"], mod["caf"]
+    split, _csep, _mode = _flags_charges(cfg)
+    caf = mod["caf"]
     idx = ref_loc["idx"]
     annees = list(range(cfg["annee_debut"], cfg["annee_fin"] + 1))
 
@@ -1019,8 +1120,9 @@ def construire_documents(wb: Workbook, cfg: dict, ref_loc: dict) -> None:
 # --------------------------------------------------------------------------- #
 
 def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> None:
-    # Sans distinction loyer nu / charges, il n'y a pas de provisions à régulariser.
-    if not (cfg["modules"].get("regularisation_charges") and cfg["modules"]["loyer_nu_charges"]):
+    # Sans charges, il n'y a pas de provisions à régulariser.
+    a_charges, _csep, mode = _flags_charges(cfg)
+    if not (cfg["modules"].get("regularisation_charges") and a_charges):
         return
 
     ws = wb.create_sheet("Régularisation charges")
@@ -1046,6 +1148,9 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
             v = saisies_reg.get((str(nom), int(annee)))
             if v not in (None, ""):
                 cr.value = v
+            elif mode == "comprises":
+                # Charges comprises : par défaut, charges réelles = provisions (modifiable).
+                cr.value = f"=C{r}"
             style_cellule(cr, saisie=True, fmt=FMT_EURO)
             cs = ws.cell(r, 5, f"=C{r}-D{r}")
             cs.number_format = FMT_EURO
@@ -1061,6 +1166,7 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
             formula=["$E2<-0.005"], fill=_fill_cf(COUL_PARTIEL)))
         ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
             formula=["$E2>0.005"], fill=_fill_cf(COUL_TROP)))
+        ws.auto_filter.ref = f"A1:F{der}"  # filtre par locataire / année
     ws.freeze_panes = "A2"
 
 
@@ -1087,7 +1193,8 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
     r = 6
     items = [
         ("1.", "Onglet « Locataires » : vérifiez les biens (type, n° / nom, adresse), les "
-               "loyers de référence et les dates d'entrée / sortie."),
+               "loyers de référence et les dates d'entrée / sortie. Les mois d'entrée et de "
+               "sortie partiels sont calculés au prorata des jours."),
         ("2.", "Une feuille par locataire : chaque mois, saisissez les montants REÇUS dans les "
                "cellules jaunes (CAF reçue, part locataire reçue, dates)."),
         ("3.", "Totaux, écarts et statuts se calculent automatiquement (cellules bleutées)."),
@@ -1095,11 +1202,15 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         ("5.", "Documents à imprimer : choisissez le locataire et la période dans les listes "
                "déroulantes ; le document se remplit seul."),
     ]
-    if cfg["modules"].get("regularisation_charges") and cfg["modules"]["loyer_nu_charges"]:
+    if cfg["modules"].get("tableau_bord", True):
         items.append(
             (f"{len(items) + 1}.",
-             "Onglet « Régularisation charges » : saisissez les charges réelles annuelles ; "
-             "le solde par locataire (à rembourser ou à compléter) se calcule seul."))
+             "Onglet « Tableau de bord » : graphiques (dû vs reçu, taux de recouvrement)."))
+    if cfg["modules"].get("regularisation_charges") and _flags_charges(cfg)[0]:
+        items.append(
+            (f"{len(items) + 1}.",
+             "Onglet « Régularisation charges » : saisissez les charges réelles annuelles "
+             "(pré-remplies en mode charges comprises) ; le solde par locataire se calcule seul."))
     if cfg["modules"].get("irl"):
         items.append(
             (f"{len(items) + 1}.",
@@ -1269,6 +1380,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     feuilles = construire_feuilles_locataires(wb, cfg, ref_loc, saisies)
     construire_donnees(wb, cfg, feuilles)
     construire_bilan(wb, cfg)
+    construire_tableau_bord(wb, cfg)
     construire_regularisation(wb, cfg, saisies_reg)
     construire_irl(wb, cfg, ref_loc, saisies_irl)
     if cfg["modules"].get("documents"):

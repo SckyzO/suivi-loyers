@@ -15,8 +15,9 @@ import generer_suivi_loyers as g
 CFG_COMPLET = {
     "bailleur": {"nom": "Smoke Complet"},
     "periode": {"annee_debut": 2024, "annee_fin": 2025},
-    "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True,
-                "documents": True, "regularisation_charges": True, "irl": True},
+    "modules": {"mode_charges": "separees", "caf": True, "depot_garantie": True,
+                "documents": True, "tableau_bord": True, "regularisation_charges": True,
+                "irl": True},
     "locataires": [
         # Nom + prénom, parti en cours de période (caution + observation).
         {"nom": "Alice", "prenom": "A", "type_bien": "Appartement", "identifiant": "Appt 1",
@@ -56,7 +57,7 @@ def main() -> int:
     wb = load_workbook(f1)
     # Onglet locataire nommé « identifiant - Nom » (évite les doublons même appartement).
     attendus = ["Guide", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob", "Données", "Bilan",
-                "Régularisation charges", "Révision IRL",
+                "Tableau de bord", "Régularisation charges", "Révision IRL",
                 "Quittance", "Avis d'échéance", "Lettre de relance"]
     assert wb.sheetnames == attendus, wb.sheetnames
     assert wb["Données"].sheet_state == "hidden"
@@ -140,6 +141,28 @@ def main() -> int:
         fb, orphelins_out=orph)
     assert "Ana" in orph, orph
     assert (tmp / "bak.bak.xlsx").is_file(), "sauvegarde .bak manquante"
+
+    # Prorata : entrée le 6 janvier (31 jours) -> facteur *26/31 dans le loyer dû.
+    fp = tmp / "prorata.xlsx"
+    g.generer_workbook(g.valider_config({**bse, "locataires": [
+        {"nom": "Pro", "identifiant": "P1", "loyer": 1000, "date_entree": "2025-01-06"}]}), fp)
+    wp = load_workbook(fp)["P1 - Pro"]
+    rp, ep = ligne_entete(wp)
+    assert "*26/31" in str(wp.cell(rp + 1, ep["Loyer dû"]).value), wp.cell(rp + 1, ep["Loyer dû"]).value
+
+    # Mode charges comprises : colonne combinée + charges réelles pré-remplies (=C2).
+    fc = tmp / "comprises.xlsx"
+    g.generer_workbook(g.valider_config({
+        "bailleur": {"nom": "C"}, "periode": {"annee_debut": 2025, "annee_fin": 2025},
+        "modules": {"mode_charges": "comprises", "caf": False, "depot_garantie": False,
+                    "documents": False, "regularisation_charges": True},
+        "locataires": [{"nom": "Cc", "identifiant": "K1", "loyer_nu": 400, "charges": 50,
+                        "date_entree": "2025-01-01"}]}), fc)
+    wc = load_workbook(fc)
+    _, eh = ligne_entete(wc["K1 - Cc"])
+    assert "Loyer (charges comprises)" in eh, list(eh)
+    assert str(wc["Régularisation charges"].cell(2, 4).value) == "=C2", \
+        wc["Régularisation charges"].cell(2, 4).value
 
     # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
     loc = wb["Locataires"]
