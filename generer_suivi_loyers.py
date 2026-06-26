@@ -32,6 +32,7 @@ import shutil
 import calendar
 import warnings
 import datetime as dt
+from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -85,6 +86,66 @@ THEMES: dict[str, dict] = {
         "locat": "548235",      # onglets feuilles locataire
         "docs": "C55A11",       # onglets documents
         "donnees": "808080",    # onglet Données (masqué)
+    },
+    "refresh-bleu": {
+        "label": "Refresh bleu",
+        "fond": "F0EEE6",
+        "primaire": "234B73",
+        "saisie": "FBF3DC",
+        "calc": "E9EFF5",
+        "solde": "C6EFCE",
+        "trop": "FFEB9C",
+        "partiel": "FFC7CE",
+        "attente": "E7E6E6",
+        "lien": "3B6FB0",
+        "locat": "4E7A4E",
+        "docs": "C06A3E",
+        "donnees": "8C8780",
+    },
+    "denim-rust": {
+        "label": "Denim & Rust",
+        "fond": "F0EEE6",
+        "primaire": "33455C",
+        "saisie": "FBF2DC",
+        "calc": "E9EDF1",
+        "solde": "C9E2C4",
+        "trop": "F6E2B3",
+        "partiel": "F1C9C2",
+        "attente": "E6E3DD",
+        "lien": "3B6FB0",
+        "locat": "5E806B",
+        "docs": "B5603F",
+        "donnees": "8C8780",
+    },
+    "monochrome-noir": {
+        "label": "Monochrome Noir",
+        "fond": "F5F5F4",
+        "primaire": "141414",
+        "saisie": "F0EFEA",
+        "calc": "EEEEED",
+        "solde": "C9E2C4",
+        "trop": "F6E2B3",
+        "partiel": "F1C9C2",
+        "attente": "E6E3DD",
+        "lien": "444444",
+        "locat": "3D3D3D",
+        "docs": "6E6E6E",
+        "donnees": "9A9A9A",
+    },
+    "ocean-deep": {
+        "label": "Ocean Deep",
+        "fond": "EEF2F4",
+        "primaire": "0B3954",
+        "saisie": "F6EFDD",
+        "calc": "E4EDF0",
+        "solde": "C9E2C4",
+        "trop": "F6E2B3",
+        "partiel": "F1C9C2",
+        "attente": "E6E3DD",
+        "lien": "1E6F8C",
+        "locat": "2A9D8F",
+        "docs": "E76F51",
+        "donnees": "87A0A8",
     },
 }
 THEME_DEFAUT = "classique"
@@ -261,6 +322,22 @@ def migrer_config(raw: dict) -> tuple[dict, list[str]]:
     if converti_bien:
         avertis.append("Ancien champ « bien » repris comme identifiant du logement.")
     cfg["locataires"] = locataires
+
+    # Apparence : thème (couleurs) + police, tolérants. Thème inconnu -> défaut + avertissement.
+    theme = cfg.get("theme")
+    if theme is not None:
+        theme = str(theme).strip().lower()
+        if theme and theme not in THEMES:
+            avertis.append(
+                f"Thème « {cfg.get('theme')} » inconnu : thème par défaut "
+                f"« {THEME_DEFAUT} » utilisé.")
+            theme = THEME_DEFAUT
+        cfg["theme"] = theme or THEME_DEFAUT
+    police = cfg.get("police")
+    if police is not None:
+        police = str(police).strip()
+        cfg["police"] = police or POLICE_DEFAUT
+
     cfg["version"] = CONFIG_VERSION
     return cfg, avertis
 
@@ -325,6 +402,8 @@ def valider_config(raw: dict) -> dict:
         "modules": modules,
         "locataires": locataires,
         "demo": bool(raw.get("demo")),   # pré-remplissage de démonstration (exemples uniquement)
+        "theme": cfg.get("theme") or THEME_DEFAUT,
+        "police": cfg.get("police") or POLICE_DEFAUT,
     }
 
 
@@ -550,6 +629,24 @@ def style_cellule(cell, *, saisie=False, calc=False, fmt=None) -> None:
     if fmt:
         cell.number_format = fmt
     cell.border = BORDURE
+
+
+def appliquer_police(wb: Workbook, police: str) -> None:
+    """Impose la police d'identité à toutes les cellules, en préservant les autres
+    attributs (gras, taille, couleur, soulignement).
+
+    Modifier le style « Normal » après écriture ne se propage pas (openpyxl fige le
+    style à l'écriture) : on réécrit donc la police cellule par cellule en dernière
+    passe. C'est le point unique d'application de la police du thème.
+    """
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                f = cell.font
+                if f is not None and f.name != police:
+                    nf = copy(f)
+                    nf.name = police
+                    cell.font = nf
 
 
 # --------------------------------------------------------------------------- #
@@ -1615,6 +1712,9 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     # Tableau de bord en 2e position, juste après le Guide (visible dès l'ouverture).
     if "Tableau de bord" in wb.sheetnames:
         wb.move_sheet("Tableau de bord", offset=1 - wb.sheetnames.index("Tableau de bord"))
+
+    # Police d'identité, en dernière passe (couvre aussi les cellules sans style explicite).
+    appliquer_police(wb, CHARTE.police)
 
     sortie.parent.mkdir(parents=True, exist_ok=True)
     # Sauvegarde de secours avant d'écraser (récupération en cas de couac).

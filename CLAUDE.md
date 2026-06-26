@@ -60,6 +60,15 @@ Flux de données clé :
   Données, Bilan, documents, IRL, préservation). Le bail stocke `nom` + `prenom` séparés.
 - **Couleurs conditionnelles** : toujours via `_fill_cf` (start+end color = bgColor). Un fill
   conditionnel avec `fgColor` seul N'APPARAÎT PAS dans Excel (bug corrigé).
+- **Identité graphique** : toutes les couleurs viennent de l'objet `CHARTE` (jamais de hex en
+  dur). `CHARTE` est résolu par `resoudre_charte(theme, police)` en tête de `generer_workbook`
+  depuis le **registre `THEMES`** (id → couleurs). Ajouter un thème = une entrée du registre,
+  rien d'autre à toucher (l'interface lit `THEMES` pour sa liste). Défaut = `classique` (look
+  historique). Thème inconnu → fallback `classique` + avertissement (via `migrer_config`). La
+  **police** est appliquée en dernière passe par `appliquer_police(wb, police)` (réécrit le nom
+  sur chaque cellule en préservant gras/taille/couleur ; modifier le style « Normal » ne se
+  propage pas). Défaut = Tahoma (Aptos n'est pas une police d'origine Windows). Clés config
+  `theme`/`police` tolérantes (`migrer_config`/`valider_config`).
 - **Mode charges** : `_flags_charges(cfg)` → `(a_charges, charges_separees, mode)` avec
   `mode_charges` ∈ {`comprises`, `separees`, `sans`} (par bailleur). En `comprises`, loyer nu et
   charges restent calculés mais **masqués** (Données/régularisation en ont besoin). Ancien

@@ -39,6 +39,13 @@ MODES = [("comprises", "Loyer charges comprises"),
 MODE_KEY = {lbl: k for k, lbl in MODES}
 MODE_LABEL = {k: lbl for k, lbl in MODES}
 
+# Apparence : thèmes pilotés par le registre du moteur (label affiché <-> identifiant).
+# Aucune liste en dur : ajouter un thème côté moteur le rend disponible ici.
+THEME_LABEL = {tid: spec["label"] for tid, spec in moteur.THEMES.items()}
+THEME_KEY = {lbl: tid for tid, lbl in THEME_LABEL.items()}
+# Polices d'origine sur Windows (rendu garanti Excel + LibreOffice). Défaut = moteur.
+POLICES = ["Tahoma", "Calibri", "Arial", "Verdana", "Segoe UI", "Georgia", "Times New Roman"]
+
 
 def _parse_nombre(txt: str) -> float:
     txt = (txt or "").strip().replace(",", ".").replace("€", "").replace(" ", "")
@@ -343,6 +350,18 @@ class Application(tk.Tk):
         ttk.Checkbutton(mf, text="Révision IRL (calcul du loyer révisé)",
                         variable=self.var_irl).pack(anchor="w", padx=8, pady=1)
 
+        apf = ttk.LabelFrame(self, text="Apparence", style="Section.TLabelframe")
+        apf.pack(fill="x", padx=14, pady=6)
+        self.var_theme = tk.StringVar(value=THEME_LABEL[moteur.THEME_DEFAUT])
+        self.var_police = tk.StringVar(value=moteur.POLICE_DEFAUT)
+        ttk.Label(apf, text="Thème (couleurs)").grid(row=0, column=0, padx=8, pady=6, sticky="w")
+        ttk.Combobox(apf, textvariable=self.var_theme,
+                     values=[THEME_LABEL[t] for t in moteur.THEMES],
+                     state="readonly", width=22).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        ttk.Label(apf, text="Police").grid(row=0, column=2, padx=(24, 8), pady=6, sticky="w")
+        ttk.Combobox(apf, textvariable=self.var_police, values=POLICES,
+                     state="readonly", width=18).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+
         lf = ttk.LabelFrame(self, text="Locataires", style="Section.TLabelframe")
         lf.pack(fill="both", expand=True, padx=14, pady=6)
         cols = [c[0] for c in self.COLS]
@@ -451,6 +470,8 @@ class Application(tk.Tk):
             "periode": {"annee_debut": self._lire_annee(self.var_debut, "Année de début"),
                         "annee_fin": self._lire_annee(self.var_fin, "Année de fin")},
             "modules": self._modules(),
+            "theme": THEME_KEY.get(self.var_theme.get(), moteur.THEME_DEFAUT),
+            "police": self.var_police.get() or moteur.POLICE_DEFAUT,
             "locataires": self.locataires,
         }
 
@@ -478,6 +499,9 @@ class Application(tk.Tk):
         self.var_tableau.set(bool(m.get("tableau_bord", True)))
         self.var_regul.set(bool(m.get("regularisation_charges", True)))
         self.var_irl.set(bool(m.get("irl", True)))
+        theme = cfg.get("theme") if cfg.get("theme") in THEME_LABEL else moteur.THEME_DEFAUT
+        self.var_theme.set(THEME_LABEL[theme])
+        self.var_police.set(cfg.get("police") or moteur.POLICE_DEFAUT)
         self.locataires = list(cfg.get("locataires", []))
         self._rafraichir_tree()
 

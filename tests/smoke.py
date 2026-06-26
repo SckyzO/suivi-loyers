@@ -333,6 +333,25 @@ def main() -> int:
     rn, en = ligne_entete(wn)
     assert wn.cell(rn + 1, en["Part locataire reçue"]).value in (None, ""), "demo off devrait être vide"
 
+    # 8) Thèmes sélectionnables : chaque thème pose sa couleur primaire sur les onglets
+    #    système et applique la police d'identité ; thème inconnu -> défaut + avertissement.
+    assert g.valider_config(CFG_COMPLET)["theme"] == g.THEME_DEFAUT == "classique"
+    assert g.valider_config(CFG_COMPLET)["police"] == g.POLICE_DEFAUT == "Tahoma"
+    for tid, spec in g.THEMES.items():
+        ct = dict(CFG_COMPLET, theme=tid)
+        ft = tmp / f"theme_{tid}.xlsx"
+        g.generer_workbook(g.valider_config(ct), ft, preserver=False)
+        wt = load_workbook(ft)
+        tc = wt["Bilan"].sheet_properties.tabColor
+        assert tc and tc.rgb[-6:] == spec["primaire"], (tid, tc.rgb if tc else None)
+        assert wt["Guide"]["B1"].font.name == "Tahoma", (tid, wt["Guide"]["B1"].font.name)
+    cfg_inc, av_inc = g.migrer_config(dict(CFG_COMPLET, theme="nimportequoi"))
+    assert cfg_inc["theme"] == "classique" and any("inconnu" in a for a in av_inc), (cfg_inc["theme"], av_inc)
+    # Police personnalisée respectée.
+    fpol = tmp / "police.xlsx"
+    g.generer_workbook(g.valider_config(dict(CFG_COMPLET, police="Verdana")), fpol, preserver=False)
+    assert load_workbook(fpol)["Guide"]["B1"].font.name == "Verdana"
+
     print("SMOKE OK")
     return 0
 

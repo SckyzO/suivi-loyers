@@ -5,6 +5,11 @@
 # peuplés). Réservé aux exemples : l'interface ne produit jamais cette clé.
 demo: true
 
+# Apparence (facultatif). Thème de couleurs et police ; absents -> « classique » + Tahoma.
+# Thèmes : classique | refresh-bleu | denim-rust | monochrome-noir | ocean-deep
+theme: ocean-deep
+police: Tahoma
+
 bailleur:
   nom: "SCI Les Tilleuls"
   adresse: "12 rue des Lilas, 35000 Rennes"
