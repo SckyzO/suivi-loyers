@@ -89,6 +89,36 @@ def main() -> int:
     cdoc = wbi["Quittance"].cell(4, 3)  # sélecteur locataire du document
     assert cdoc.data_type == "s", cdoc.data_type
 
+    # Validations (M1/M2/m8).
+    bse = {"bailleur": {"nom": "B"}, "periode": {"annee_debut": 2025, "annee_fin": 2025},
+           "modules": {"loyer_nu_charges": False, "caf": False, "depot_garantie": False,
+                       "documents": False}}
+
+    def doit_lever(cfg, motif):
+        try:
+            g.valider_config(cfg)
+        except ValueError:
+            return
+        raise AssertionError(f"ValueError attendue : {motif}")
+
+    doit_lever({**bse, "locataires": [
+        {"nom": "Dupont", "prenom": "Jean", "loyer": 100, "date_entree": "2025-01-01"},
+        {"nom": "Dupont", "prenom": "Jean", "loyer": 100, "date_entree": "2025-01-01"}]},
+        "doublon d'identité")
+    doit_lever({**bse, "locataires": [
+        {"nom": "X", "loyer": "abc", "date_entree": "2025-01-01"}]}, "montant non numérique")
+    doit_lever({**bse, "locataires": [
+        {"nom": "Y", "loyer": 100, "date_entree": "2025-06-01", "date_sortie": "2025-01-01"}]},
+        "sortie avant entrée")
+
+    # m8 : casse normalisée + module inconnu averti.
+    _, av = g.migrer_config({**bse, "modules": {"Documents": True, "bidon": True},
+                             "locataires": [{"nom": "Z", "loyer": 100, "date_entree": "2025-01-01"}]})
+    assert any("inconnu" in a.lower() for a in av), av
+    norm = g.valider_config({**bse, "modules": {"Documents": True},
+                             "locataires": [{"nom": "Z", "loyer": 100, "date_entree": "2025-01-01"}]})
+    assert norm["modules"]["documents"] is True
+
     # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
     loc = wb["Locataires"]
     hl = {loc.cell(1, c).value: c for c in range(1, loc.max_column + 1)}

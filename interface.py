@@ -364,6 +364,13 @@ class Application(tk.Tk):
     def _maj_sci(self) -> None:
         self.ent_sci.configure(state="normal" if self.var_sci.get() else "disabled")
 
+    @staticmethod
+    def _lire_annee(var: tk.IntVar, label: str) -> int:
+        try:
+            return int(var.get())
+        except (tk.TclError, ValueError):
+            raise ValueError(f"{label} invalide (saisissez une année).")
+
     def _modules(self) -> dict:
         return {"loyer_nu_charges": self.var_split.get(), "caf": self.var_caf.get(),
                 "depot_garantie": self.var_depot.get(), "documents": self.var_documents.get(),
@@ -427,7 +434,8 @@ class Application(tk.Tk):
                          "sci": self.var_sci.get(), "sci_nom": self.var_sci_nom.get().strip(),
                          "adresse": self.var_adresse.get(), "tel": self.var_tel.get(),
                          "email": self.var_email.get()},
-            "periode": {"annee_debut": self.var_debut.get(), "annee_fin": self.var_fin.get()},
+            "periode": {"annee_debut": self._lire_annee(self.var_debut, "Année de début"),
+                        "annee_fin": self._lire_annee(self.var_fin, "Année de fin")},
             "modules": self._modules(),
             "locataires": self.locataires,
         }
@@ -490,7 +498,7 @@ class Application(tk.Tk):
             return
         chemin = filedialog.asksaveasfilename(
             title="Enregistrer la configuration", defaultextension=".json",
-            initialfile=f"config_{moteur._slug(moteur.base_fichier(cfg['bailleur']))}.json",
+            initialfile=f"config_{moteur.base_slug(cfg['bailleur'])}.json",
             filetypes=[("Configuration JSON", "*.json")])
         if not chemin:
             return
@@ -510,7 +518,7 @@ class Application(tk.Tk):
             messagebox.showerror(APP_TITRE, str(e))
             return
 
-        slug = moteur._slug(moteur.base_fichier(cfg["bailleur"]))
+        slug = moteur.base_slug(cfg["bailleur"])
         chemin = filedialog.asksaveasfilename(
             title="Enregistrer le classeur de suivi", defaultextension=".xlsx",
             initialfile=f"Suivi_{slug}.xlsx", filetypes=[("Classeur Excel", "*.xlsx")])
@@ -528,12 +536,16 @@ class Application(tk.Tk):
 
         preserver = True
         if xlsx.exists():
-            preserver = messagebox.askyesno(
+            rep = messagebox.askyesnocancel(
                 APP_TITRE,
                 "Ce fichier existe déjà.\n\n"
                 "Voulez-vous CONSERVER les loyers déjà saisis dedans ?\n\n"
                 "• Oui : on met à jour la structure (locataires, options) en gardant vos saisies.\n"
-                "• Non : on repart d'un fichier vierge (les saisies seront perdues).")
+                "• Non : on repart d'un fichier vierge (les saisies seront perdues).\n"
+                "• Annuler : ne rien faire.")
+            if rep is None:   # Annuler / fermeture de la fenêtre : on n'écrase rien.
+                return
+            preserver = rep
         try:
             sortie = moteur.generer_workbook(cfg, xlsx, preserver=preserver)
         except Exception as e:  # noqa: BLE001 - retour utilisateur

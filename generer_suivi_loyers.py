@@ -120,10 +120,16 @@ def migrer_config(raw: dict) -> tuple[dict, list[str]]:
     cfg["bailleur"] = dict(cfg.get("bailleur") or {})
     cfg["periode"] = dict(cfg.get("periode") or {})
 
-    modules = dict(cfg.get("modules") or {})
-    if "quittances" in modules and "documents" not in modules:
-        modules["documents"] = bool(modules.pop("quittances"))
-        avertis.append("Ancien module « quittances » converti en « documents ».")
+    modules = {}
+    for k, v in (cfg.get("modules") or {}).items():
+        kl = str(k).strip().lower()
+        if kl == "quittances":
+            kl = "documents"
+            avertis.append("Ancien module « quittances » converti en « documents ».")
+        if kl not in MODULES_DEFAUT:
+            avertis.append(f"Module inconnu ignoré : « {k} ».")
+            continue
+        modules[kl] = v
     cfg["modules"] = modules
 
     locataires = []
@@ -165,9 +171,39 @@ def valider_config(raw: dict) -> dict:
     locataires = cfg["locataires"]
     if not locataires:
         raise ValueError("Il faut au moins un locataire.")
+
+    vus: dict[str, int] = {}
     for i, loc in enumerate(locataires, 1):
         if not loc.get("nom"):
             raise ValueError(f"Le locataire #{i} n'a pas de nom.")
+        ident = _identite(loc)
+        for champ in ("loyer_nu", "charges", "loyer", "loyer_total", "part_caf",
+                      "depot_garantie"):
+            if loc.get(champ) not in (None, ""):
+                try:
+                    x = float(loc[champ])
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Locataire « {ident} » : {champ} non numérique ({loc[champ]!r}).")
+                if not math.isfinite(x):
+                    raise ValueError(f"Locataire « {ident} » : {champ} invalide.")
+        try:
+            de = _date(loc.get("date_entree"))
+        except ValueError:
+            raise ValueError(
+                f"Locataire « {ident} » : date d'entrée invalide ({loc.get('date_entree')!r}).")
+        try:
+            ds = _date(loc.get("date_sortie"))
+        except ValueError:
+            raise ValueError(
+                f"Locataire « {ident} » : date de sortie invalide ({loc.get('date_sortie')!r}).")
+        if de and ds and ds < de:
+            raise ValueError(f"Locataire « {ident} » : date de sortie avant la date d'entrée.")
+        if ident in vus:
+            raise ValueError(
+                f"Deux locataires portent la même identité « {ident} ». "
+                "Ajoutez un prénom ou différenciez-les (les saisies seraient mélangées).")
+        vus[ident] = i
 
     return {
         "bailleur": bailleur,
@@ -225,6 +261,11 @@ def base_fichier(bailleur: dict) -> str:
     if bailleur.get("sci") and str(bailleur.get("sci_nom") or "").strip():
         return f"{bailleur['sci_nom']} {perso}".strip()
     return perso or nom
+
+
+def base_slug(bailleur: dict) -> str:
+    """Base assainie pour nom de fichier (contrat public pour l'interface)."""
+    return _slug(base_fichier(bailleur))
 
 
 def _identite(loc: dict) -> str:
@@ -290,6 +331,17 @@ def _neutraliser(cell):
 def ecrire_texte(ws, row, column, valeur):
     """Écrit une valeur d'origine utilisateur sans risque d'interprétation en formule."""
     return _neutraliser(ws.cell(row, column, valeur))
+
+
+def _formule_liste(valeurs) -> str:
+    """Formule de validation « liste inline ». Excel plafonne à 255 car. : on échoue
+    explicitement plutôt que de tronquer silencieusement (cf. ajout futur d'options)."""
+    formule = '"%s"' % ",".join(str(v) for v in valeurs)
+    if len(formule) > 255:
+        raise ValueError(
+            f"Liste de validation trop longue ({len(formule)} car. > 255). "
+            "Basculer sur une plage nommée.")
+    return formule
 
 
 def style_cellule(cell, *, saisie=False, calc=False, fmt=None) -> None:
@@ -389,7 +441,7 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
                           saisie=not est_formule and champ in saisie_champs)
 
     def validation(champ: str, valeurs: list[str], *, bloquant=True) -> None:
-        dv = DataValidation(type="list", formula1='"%s"' % ",".join(valeurs),
+        dv = DataValidation(type="list", formula1=_formule_liste(valeurs),
                             allow_blank=True, showErrorMessage=bloquant)
         dv.add(f"{lettre[champ]}2:{lettre[champ]}{derniere}")
         ws.add_data_validation(dv)
@@ -535,9 +587,11 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                         cell.value = f"={L['total_recu']}{r}-{L['total_du']}{r}"
                     elif key == "statut":
                         tr, ec = f"{L['total_recu']}{r}", f"{L['ecart']}{r}"
-                        cell.value = (f'=IF({tr}=0,"À encaisser",'
+                        td = f"{L['total_du']}{r}"
+                        cell.value = (f'=IF(AND({td}=0,{tr}=0),"Soldé",'
+                                      f'IF({tr}=0,"À encaisser",'
                                       f'IF(ABS({ec})<=0.005,"Soldé",'
-                                      f'IF({ec}>0,"Trop-perçu","Partiel")))')
+                                      f'IF({ec}>0,"Trop-perçu","Partiel"))))')
                     elif key in COLS_SAISIE and key in preserve:
                         cell.value = preserve[key]
                     style_cellule(cell, fmt=c.get("fmt"),
@@ -778,11 +832,10 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
     fin_rev = r - 1
 
     if fin_rev >= rs + 1:
-        dvt = DataValidation(type="list", formula1='"%s"' % ",".join(TRIMESTRES), allow_blank=True)
+        dvt = DataValidation(type="list", formula1=_formule_liste(TRIMESTRES), allow_blank=True)
         dvt.add(f"C{rs + 1}:C{fin_rev}")
         ws.add_data_validation(dvt)
-        dva = DataValidation(type="list", formula1='"%s"' % ",".join(str(a) for a in annees),
-                             allow_blank=True)
+        dva = DataValidation(type="list", formula1=_formule_liste(annees), allow_blank=True)
         dva.add(f"D{rs + 1}:D{fin_rev}")
         ws.add_data_validation(dva)
     ws.freeze_panes = "A5"
@@ -848,8 +901,8 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
         ws.add_data_validation(dv)
 
     valider("C4", "=LocatairesListe")
-    valider("C5", '"%s"' % ",".join(MOIS))
-    valider("E5", '"%s"' % ",".join(str(a) for a in annees))
+    valider("C5", _formule_liste(MOIS))
+    valider("E5", _formule_liste(annees))
 
     def vlook(field: str) -> str:
         return f'IFERROR(VLOOKUP($C$4,RefLocataires,{idx[field]},FALSE),"")'
@@ -912,7 +965,7 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
         r_date = fin
         ws.cell(r_date, 2, "Date de paiement").font = Font(bold=True)
         cd = ws.cell(r_date, 3,
-                     f'=IF({sif("Suivi_TotalRecu")}=0,"",{sif("Suivi_LocDate")})')
+                     f'=IF({sif("Suivi_LocRecu")}=0,"",{sif("Suivi_LocDate")})')
         cd.number_format = FMT_DATE
         cd.border = BORDURE
         fin = r_date + 1
@@ -1073,12 +1126,8 @@ _TITRE_VERS_KEY = {
 }
 
 
-def recolter_saisies(chemin_xlsx: Path) -> dict:
-    """Saisies utilisateur d'un classeur existant : (nom, année, mois) -> {colonne: valeur}."""
-    chemin_xlsx = Path(chemin_xlsx)
-    if not chemin_xlsx.is_file():
-        return {}
-    wb = load_workbook(chemin_xlsx, data_only=False)
+def recolter_saisies(wb) -> dict:
+    """Saisies utilisateur d'un classeur déjà chargé : (nom, année, mois) -> {colonne: valeur}."""
     saisies: dict = {}
 
     for nom_feuille in wb.sheetnames:
@@ -1116,12 +1165,8 @@ def recolter_saisies(chemin_xlsx: Path) -> dict:
     return saisies
 
 
-def recolter_regularisation(chemin_xlsx: Path) -> dict:
+def recolter_regularisation(wb) -> dict:
     """Charges réelles déjà saisies : (nom, année) -> montant."""
-    chemin_xlsx = Path(chemin_xlsx)
-    if not chemin_xlsx.is_file():
-        return {}
-    wb = load_workbook(chemin_xlsx, data_only=False)
     if "Régularisation charges" not in wb.sheetnames:
         return {}
     ws = wb["Régularisation charges"]
@@ -1137,12 +1182,8 @@ def recolter_regularisation(chemin_xlsx: Path) -> dict:
     return res
 
 
-def recolter_irl(chemin_xlsx: Path) -> dict:
-    """Saisies IRL d'un classeur existant : indices et choix de révision par locataire."""
-    chemin_xlsx = Path(chemin_xlsx)
-    if not chemin_xlsx.is_file():
-        return {}
-    wb = load_workbook(chemin_xlsx, data_only=False)
+def recolter_irl(wb) -> dict:
+    """Saisies IRL d'un classeur déjà chargé : indices et choix de révision par locataire."""
     if "Révision IRL" not in wb.sheetnames:
         return {}
     ws = wb["Révision IRL"]
@@ -1189,9 +1230,21 @@ def recolter_irl(chemin_xlsx: Path) -> dict:
 def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path:
     cfg = valider_config(cfg) if "annee_debut" not in cfg else cfg
     sortie = Path(sortie)
-    saisies = recolter_saisies(sortie) if preserver else {}
-    saisies_reg = recolter_regularisation(sortie) if preserver else {}
-    saisies_irl = recolter_irl(sortie) if preserver else {}
+
+    # Un seul chargement du classeur existant pour récolter toutes les saisies.
+    saisies, saisies_reg, saisies_irl = {}, {}, {}
+    if preserver and sortie.is_file():
+        wbx = load_workbook(sortie, data_only=False)
+        saisies = recolter_saisies(wbx)
+        saisies_reg = recolter_regularisation(wbx)
+        saisies_irl = recolter_irl(wbx)
+
+    # m7 : signaler les saisies orphelines (locataire renommé/supprimé).
+    identites = {_identite(loc) for loc in cfg["locataires"]}
+    orphelins = sorted({nom for (nom, _, _) in saisies if nom not in identites})
+    if orphelins:
+        print("Attention : saisies non réattribuées (locataire renommé ou supprimé) : "
+              + ", ".join(orphelins), file=sys.stderr)
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -1213,7 +1266,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
 
 def generer(chemin_config: Path, dossier_sortie: Path) -> Path:
     cfg = charger_config(chemin_config)
-    sortie = Path(dossier_sortie) / f"Suivi_{_slug(base_fichier(cfg['bailleur']))}.xlsx"
+    sortie = Path(dossier_sortie) / f"Suivi_{base_slug(cfg['bailleur'])}.xlsx"
     return generer_workbook(cfg, sortie)
 
 
