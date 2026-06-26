@@ -7,6 +7,24 @@ REM ===================================================================
 setlocal
 cd /d %~dp0
 
+REM --- Si l'application est ouverte, PyInstaller ne peut pas remplacer le .exe. ---
+tasklist /FI "IMAGENAME eq SuiviLoyers.exe" 2>NUL | find /I "SuiviLoyers.exe" >NUL
+if errorlevel 1 goto :build_start
+echo.
+echo L'application SuiviLoyers.exe est actuellement ouverte.
+echo Il faut la fermer pour pouvoir reconstruire l'executable.
+set /p REP=La fermer maintenant ? (O/N) :
+if /I "%REP%"=="O" (
+  taskkill /IM SuiviLoyers.exe /F >NUL 2>&1
+  echo Application fermee.
+) else (
+  echo.
+  echo Build annule. Fermez l'application puis relancez build.bat.
+  pause
+  exit /b 1
+)
+:build_start
+
 echo [1/3] Creation de l'environnement de build...
 python -m venv .buildenv || goto :erreur
 call .buildenv\Scripts\activate.bat
