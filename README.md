@@ -17,10 +17,12 @@ Une fois que vous avez le fichier `SuiviLoyers.exe` :
 1. Double-cliquez sur `SuiviLoyers.exe`. Une fenêtre s'ouvre.
 2. Renseignez le **bailleur** (au minimum son nom) et la **période** (année de début et de fin).
 3. Cochez les **options** utiles à ce bailleur :
-   - *Séparer loyer nu / charges* : si vous suivez le loyer et les charges séparément.
+   - *Loyer / charges* : *charges comprises* (un seul montant payé, charges connues pour la
+     régularisation), *charges séparées* (loyer nu + charges affichés à part), ou *sans charges*.
    - *Suivre la part CAF* : si une partie du loyer est versée directement par la CAF.
    - *Suivre le dépôt de garantie*.
    - *Documents à imprimer* : ajoute les onglets quittance, avis d'échéance et lettre de relance.
+   - *Tableau de bord* : un onglet de graphiques (dû vs reçu, taux de recouvrement…).
 4. Ajoutez les **locataires** (bouton *Ajouter*). Pour chacun :
    - *Nom* et *Prénom* (deux champs séparés).
    - *Type de bien* : appartement ou maison.
@@ -29,7 +31,8 @@ Une fois que vous avez le fichier `SuiviLoyers.exe` :
      plusieurs locataires.
    - *Adresse du logement* : choisissez une adresse déjà saisie (pratique pour plusieurs
      appartements au même immeuble) ou tapez-en une nouvelle.
-   - Les montants et la *date d'entrée* (calendrier).
+   - Les montants et la *date d'entrée* (calendrier). Les mois d'entrée et de sortie
+     partiels sont automatiquement calculés au **prorata des jours**.
    - Si le locataire est parti, cochez **Le locataire est parti** : cela active la *date de
      sortie*, la case *Caution rendue* et le *motif de départ* (liste : fin de bail, loyer
      impayé, travaux… ou un texte libre).

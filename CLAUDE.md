@@ -26,7 +26,8 @@ et par l'interface. Garder cette frontière : pas de logique métier dans l'inte
 ## Onglets du classeur
 
 `Guide` · `Locataires` (référentiel) · **une feuille par locataire** (saisie, nommée par
-l'identifiant du bien) · `Données` (consolidée, **masquée**) · `Bilan` · documents (`Quittance`,
+l'identifiant du bien) · `Données` (consolidée, **masquée**) · `Bilan` · `Tableau de bord`
+(graphiques) · `Régularisation charges` · `Révision IRL` · documents (`Quittance`,
 `Avis d'échéance`, `Lettre de relance`).
 
 Flux de données clé :
@@ -59,6 +60,12 @@ Flux de données clé :
   Données, Bilan, documents, IRL, préservation). Le bail stocke `nom` + `prenom` séparés.
 - **Couleurs conditionnelles** : toujours via `_fill_cf` (start+end color = bgColor). Un fill
   conditionnel avec `fgColor` seul N'APPARAÎT PAS dans Excel (bug corrigé).
+- **Mode charges** : `_flags_charges(cfg)` → `(a_charges, charges_separees, mode)` avec
+  `mode_charges` ∈ {`comprises`, `separees`, `sans`} (par bailleur). En `comprises`, loyer nu et
+  charges restent calculés mais **masqués** (Données/régularisation en ont besoin). Ancien
+  booléen `loyer_nu_charges` mappé en rétro-compat. Ne plus lire `loyer_nu_charges` directement.
+- **Prorata** : `_prorata_suffixe(loc, année, mois)` renvoie `*jours/jours_du_mois` (jours réels,
+  février géré) pour les mois d'entrée/sortie partiels ; appliqué au loyer/charges, pas à la CAF.
 - **Texte d'origine utilisateur** : l'écrire via `ecrire_texte` (anti-injection de formule :
   openpyxl traite une chaîne commençant par `=` comme une formule). Ne jamais écrire un champ
   saisi (nom, adresse, identifiant, observation, bailleur…) par un `ws.cell(...)` brut.
@@ -99,12 +106,12 @@ et avertissement explicite si la config vient d'une version **plus récente** qu
 
 ## Modules (tous implémentés)
 
-`documents` (quittance + avis d'échéance + lettre de relance, builder générique
-`construire_document`), `regularisation_charges` (`construire_regularisation`), et `irl`
-(`construire_irl` : table d'indices IRL + calcul du loyer révisé par locataire). Les saisies
-propres à ces onglets sont préservées par `recolter_regularisation` et `recolter_irl`, en plus
-de `recolter_saisies` (mensuel).
+`documents` (`construire_document`), `tableau_bord` (`construire_tableau_bord` : graphiques
+openpyxl basés sur le Bilan), `regularisation_charges` (`construire_regularisation` : filtre
+locataire + pré-remplissage = provisions en mode comprises) et `irl` (`construire_irl`). Les
+saisies propres à ces onglets sont préservées par `recolter_regularisation` et `recolter_irl`,
+en plus de `recolter_saisies` (mensuel).
 
-Limite assumée IRL : c'est un **calculateur d'aide**. Le loyer attendu du suivi suit toujours
-la fiche locataire courante ; l'intégration loyer-par-année (révision répercutée
-automatiquement mois par mois) est reportée à la passe design.
+Limite assumée IRL : c'est un **calculateur d'aide**. Le loyer attendu du suivi suit la fiche
+locataire courante ; l'intégration loyer-par-année (révision répercutée mois par mois) reste à
+faire dans la passe design Excel.
