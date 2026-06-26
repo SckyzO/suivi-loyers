@@ -85,15 +85,17 @@ L'`.exe` se construit sous Windows.
 
 ## Pour le mainteneur
 
-Le projet se teste sans rien installer localement, via Docker.
+Le projet se teste sans rien installer localement, via Docker. Le plus simple est `make`, qui
+construit l'image, génère les exemples dans `exemples/`, lance le smoke test et synchronise le
+code (et les exemples) vers le dossier Windows.
 
 ```bash
-# Construire l'image
-docker compose build
+make                  # build + exemples + test + sync
 
-# Générer un classeur depuis une config YAML (sortie dans ./sorties)
-docker compose run --rm suivi configs/exemple.yaml
-docker compose run --rm suivi configs/minimal.yaml
+# ou à la main :
+docker compose build
+docker compose run --rm suivi configs/exemple.yaml exemples
+docker compose run --rm suivi configs/minimal.yaml exemples
 ```
 
 Le moteur (`generer_suivi_loyers.py`) lit une config et écrit le `.xlsx`. L'interface

@@ -1,5 +1,6 @@
-# Sorties générées
+# Sorties / exemples générés
 sorties/
+exemples/
 *.xlsx
 
 # Artefacts de build PyInstaller (Windows)
