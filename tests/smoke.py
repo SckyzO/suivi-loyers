@@ -352,6 +352,16 @@ def main() -> int:
     g.generer_workbook(g.valider_config(dict(CFG_COMPLET, police="Verdana")), fpol, preserver=False)
     assert load_workbook(fpol)["Guide"]["B1"].font.name == "Verdana"
 
+    # Compensation de largeur : une police plus large que Calibri élargit les colonnes posées.
+    fcal = tmp / "w_calibri.xlsx"
+    ftah = tmp / "w_tahoma.xlsx"
+    g.generer_workbook(g.valider_config(dict(CFG_COMPLET, police="Calibri")), fcal, preserver=False)
+    g.generer_workbook(g.valider_config(dict(CFG_COMPLET, police="Tahoma")), ftah, preserver=False)
+    wc = load_workbook(fcal)["Locataires"].column_dimensions["A"].width
+    wt = load_workbook(ftah)["Locataires"].column_dimensions["A"].width
+    assert wc and wt and wt > wc, (wc, wt)
+    assert abs(wt / wc - g.FACTEUR_LARGEUR["Tahoma"]) < 0.02, (wc, wt, wt / wc)
+
     print("SMOKE OK")
     return 0
 

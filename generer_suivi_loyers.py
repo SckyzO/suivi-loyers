@@ -649,6 +649,37 @@ def appliquer_police(wb: Workbook, police: str) -> None:
                     cell.font = nf
 
 
+# Largeur de colonne = nombre de caractères de la police de base du classeur
+# (fonts[0] = Calibri, figée par openpyxl et non modifiable proprement). Les largeurs
+# sont calibrées pour Calibri ; une police plus large déborde. On élargit donc chaque
+# colonne d'un facteur dépendant de la police (Calibri = 1.0 = référence). Un seul
+# nombre à régler par police si le rendu reste trop juste.
+FACTEUR_LARGEUR = {
+    "Calibri": 1.0,
+    "Tahoma": 1.10,
+    "Verdana": 1.16,
+    "Segoe UI": 1.04,
+    "Arial": 1.06,
+    "Georgia": 1.08,
+    "Times New Roman": 1.0,
+}
+
+
+def ajuster_colonnes(wb: Workbook, police: str) -> None:
+    """Compense la largeur des polices plus larges que Calibri (cf. FACTEUR_LARGEUR).
+
+    N'agit que sur les largeurs explicitement posées : préserve les proportions
+    calibrées à la main, ne touche pas aux colonnes laissées par défaut.
+    """
+    facteur = FACTEUR_LARGEUR.get(police, 1.0)
+    if facteur == 1.0:
+        return
+    for ws in wb.worksheets:
+        for dim in ws.column_dimensions.values():
+            if dim.width:
+                dim.width = round(dim.width * facteur, 1)
+
+
 # --------------------------------------------------------------------------- #
 # Onglet Locataires (référentiel)
 # --------------------------------------------------------------------------- #
@@ -1713,8 +1744,10 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     if "Tableau de bord" in wb.sheetnames:
         wb.move_sheet("Tableau de bord", offset=1 - wb.sheetnames.index("Tableau de bord"))
 
-    # Police d'identité, en dernière passe (couvre aussi les cellules sans style explicite).
+    # Police d'identité, en dernière passe (couvre aussi les cellules sans style explicite),
+    # puis compensation de largeur des colonnes pour les polices plus larges que Calibri.
     appliquer_police(wb, CHARTE.police)
+    ajuster_colonnes(wb, CHARTE.police)
 
     sortie.parent.mkdir(parents=True, exist_ok=True)
     # Sauvegarde de secours avant d'écraser (récupération en cas de couac).
