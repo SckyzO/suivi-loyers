@@ -19,9 +19,10 @@ from tkinter import ttk, filedialog, messagebox
 
 import generer_suivi_loyers as moteur
 
-# Sélecteur de date « calendrier » si tkcalendar est disponible ; sinon saisie texte.
+# Calendrier optionnel : si tkcalendar est dispo, on ajoute un bouton 📅 ; la saisie
+# clavier (AAAA-MM-JJ) reste toujours possible, calendrier ou pas.
 try:
-    from tkcalendar import DateEntry
+    from tkcalendar import Calendar
     HAS_CAL = True
 except Exception:  # noqa: BLE001
     HAS_CAL = False
@@ -42,45 +43,58 @@ def _parse_nombre(txt: str) -> float:
 # --------------------------------------------------------------------------- #
 
 class ChampDate:
+    """Saisie de date : zone texte AAAA-MM-JJ (toujours tapable au clavier) + bouton 📅."""
+
     def __init__(self, parent, iso: str = ""):
-        self.kind = "cal" if HAS_CAL else "entry"
+        self.frame = ttk.Frame(parent)
+        self.var = tk.StringVar(value=iso or "")
+        self.entry = ttk.Entry(self.frame, textvariable=self.var, width=12)
+        self.entry.pack(side="left")
+        ttk.Label(self.frame, text="AAAA-MM-JJ", foreground="#888").pack(side="left", padx=(4, 0))
+        self.bouton = None
         if HAS_CAL:
-            self.widget = DateEntry(parent, date_pattern="yyyy-mm-dd", width=14,
-                                    state="readonly")
-            self.set(iso)
-        else:
-            self.var = tk.StringVar(value=iso or "")
-            self.widget = ttk.Entry(parent, textvariable=self.var, width=16)
+            self.bouton = ttk.Button(self.frame, text="📅", width=3, command=self._ouvrir)
+            self.bouton.pack(side="left", padx=(4, 0))
 
     def grid(self, **kw):
-        self.widget.grid(**kw)
+        self.frame.grid(**kw)
+
+    def _ouvrir(self) -> None:
+        top = tk.Toplevel(self.frame)
+        top.title("Choisir une date")
+        top.transient(self.frame.winfo_toplevel())
+        top.grab_set()
+        try:
+            d = dt.date.fromisoformat(self.var.get().strip())
+        except ValueError:
+            d = dt.date.today()
+        cal = Calendar(top, selectmode="day", year=d.year, month=d.month, day=d.day,
+                       date_pattern="yyyy-mm-dd")
+        cal.pack(padx=8, pady=8)
+
+        def valider():
+            self.var.set(cal.get_date())
+            top.destroy()
+
+        ttk.Button(top, text="Valider", command=valider).pack(pady=(0, 8))
+        self.entry.focus_set()
 
     def get(self) -> str:
-        if self.kind == "cal":
-            try:
-                return self.widget.get_date().isoformat()
-            except Exception:  # noqa: BLE001 - aucun jour sélectionné
-                return ""
         txt = self.var.get().strip()
         if txt:
-            dt.date.fromisoformat(txt)  # lève ValueError si invalide
+            dt.date.fromisoformat(txt)  # lève ValueError si format invalide
         return txt
 
     def set(self, iso: str) -> None:
-        if self.kind == "cal":
-            if iso:
-                try:
-                    self.widget.set_date(dt.date.fromisoformat(str(iso)))
-                except Exception:  # noqa: BLE001
-                    pass
-        else:
-            self.var.set(iso or "")
+        self.var.set(iso or "")
 
     def set_state(self, state: str) -> None:
-        try:
-            self.widget.configure(state=state)
-        except Exception:  # noqa: BLE001
-            pass
+        for w in (self.entry, self.bouton):
+            if w is not None:
+                try:
+                    w.configure(state=state)
+                except Exception:  # noqa: BLE001
+                    pass
 
 
 # --------------------------------------------------------------------------- #
@@ -185,7 +199,7 @@ class DialogueLocataire(tk.Toplevel):
     def _maj_sortie(self) -> None:
         actif = self.var_parti.get()
         etat = "normal" if actif else "disabled"
-        self.date_sortie.set_state("readonly" if (actif and HAS_CAL) else etat)
+        self.date_sortie.set_state(etat)
         if self._depot:
             self.chk_caution.configure(state=etat)
         self.cb_observation.configure(state=("normal" if actif else "disabled"))
