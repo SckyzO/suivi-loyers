@@ -82,41 +82,82 @@ MODULES_DEFAUT = {
     "regularisation_charges": False,  # phase 2
 }
 
+# Version du schéma de config. Incrémenter quand un changement nécessite une migration ;
+# migrer_config() doit alors gérer la transition depuis les versions antérieures.
+CONFIG_VERSION = 1
+
 
 # --------------------------------------------------------------------------- #
 # Config
 # --------------------------------------------------------------------------- #
 
-def valider_config(raw: dict) -> dict:
-    if not isinstance(raw, dict):
-        raise ValueError("La config doit être un mapping (clés bailleur, periode, …).")
+def migrer_config(raw: dict) -> tuple[dict, list[str]]:
+    """Normalise une config, y compris ancienne, de façon TOLÉRANTE.
 
-    bailleur = raw.get("bailleur") or {}
+    Ne lève pas pour des champs manquants : complète au mieux et renvoie la liste des
+    adaptations effectuées (pour informer l'utilisateur). Sert de point unique de
+    rétro-compatibilité quand le schéma évolue (cf. CONFIG_VERSION).
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("Fichier de configuration illisible (format inattendu).")
+
+    avertis: list[str] = []
+    cfg = dict(raw)
+    ver = cfg.get("version")
+    if ver not in (None, CONFIG_VERSION):
+        avertis.append(f"Configuration version {ver} adaptée à la version {CONFIG_VERSION}.")
+
+    cfg["bailleur"] = dict(cfg.get("bailleur") or {})
+    cfg["periode"] = dict(cfg.get("periode") or {})
+
+    modules = dict(cfg.get("modules") or {})
+    if "quittances" in modules and "documents" not in modules:
+        modules["documents"] = bool(modules.pop("quittances"))
+        avertis.append("Ancien module « quittances » converti en « documents ».")
+    cfg["modules"] = modules
+
+    locataires = []
+    converti_bien = False
+    for loc in (cfg.get("locataires") or []):
+        if not isinstance(loc, dict):
+            avertis.append("Un locataire au format inattendu a été ignoré.")
+            continue
+        loc = dict(loc)
+        loc.setdefault("type_bien", TYPES_BIEN[0])
+        if not loc.get("identifiant"):
+            loc["identifiant"] = loc.get("bien") or loc.get("nom") or ""
+            if loc.get("bien"):
+                converti_bien = True
+        locataires.append(loc)
+    if converti_bien:
+        avertis.append("Ancien champ « bien » repris comme identifiant du logement.")
+    cfg["locataires"] = locataires
+    cfg["version"] = CONFIG_VERSION
+    return cfg, avertis
+
+
+def valider_config(raw: dict) -> dict:
+    cfg, _ = migrer_config(raw)
+
+    bailleur = cfg["bailleur"]
     if not bailleur.get("nom"):
         raise ValueError("Le nom du bailleur est obligatoire.")
 
-    periode = raw.get("periode") or {}
+    periode = cfg["periode"]
     annee_debut = int(periode.get("annee_debut", dt.date.today().year))
     annee_fin = int(periode.get("annee_fin", annee_debut))
     if annee_fin < annee_debut:
         raise ValueError("L'année de fin doit être supérieure ou égale à l'année de début.")
 
     modules = dict(MODULES_DEFAUT)
-    modules.update(raw.get("modules") or {})
-    # Rétro-compat : ancienne clé `quittances`.
-    if "quittances" in (raw.get("modules") or {}):
-        modules["documents"] = bool(raw["modules"]["quittances"])
+    modules.update(cfg["modules"])
 
-    locataires = raw.get("locataires") or []
+    locataires = cfg["locataires"]
     if not locataires:
         raise ValueError("Il faut au moins un locataire.")
     for i, loc in enumerate(locataires, 1):
         if not loc.get("nom"):
             raise ValueError(f"Le locataire #{i} n'a pas de nom.")
-        loc.setdefault("type_bien", TYPES_BIEN[0])
-        # Compat : ancien champ unique `bien` -> identifiant si rien d'autre.
-        if not loc.get("identifiant"):
-            loc["identifiant"] = loc.get("bien") or loc["nom"]
 
     return {
         "bailleur": bailleur,

@@ -74,6 +74,19 @@ locataire. Tout fichier à visualiser doit finir dans `~/Downloads` (cf. mémoir
 Un hook git `post-commit` relance `make sync-win` à chaque commit pour que `build.bat` parte
 toujours de la dernière version côté Windows.
 
+## Compatibilité des configs (anciennes versions)
+
+`migrer_config(raw) -> (cfg, avertissements)` est le **point unique** de rétro-compatibilité :
+tolérant (ne lève pas pour un champ manquant), il convertit les anciens schémas (`bien` ->
+`identifiant`, module `quittances` -> `documents`) et renvoie la liste des adaptations.
+`valider_config` l'appelle puis impose les champs requis ; l'interface l'utilise au chargement
+et affiche les avertissements. Toute évolution de schéma incrémente `CONFIG_VERSION` et ajoute
+sa transition ici.
+
+Différé (à approfondir plus tard) : sauvegarde `.bak` du fichier chargé, coercition stricte des
+types (montants/dates), et gestion d'une config issue d'une version **plus récente** que le
+binaire (avertir clairement plutôt que mal interpréter).
+
 ## Reste à faire (phase 2)
 
 Seul `irl` reste inactif (défaut `false`). Il devra introduire une table loyer-par-année (le

@@ -128,6 +128,25 @@ def main() -> int:
             break
     assert val == 612, f"charge réelle non préservée: {val}"
 
+    # 6) Rétro-compatibilité : une « ancienne » config (champ bien, module quittances)
+    #    se migre et génère sans erreur.
+    legacy = {
+        "bailleur": {"nom": "Legacy"},
+        "periode": {"annee_debut": 2025, "annee_fin": 2025},
+        "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": False,
+                    "quittances": True},
+        "locataires": [{"nom": "Old", "bien": "Appt Z", "loyer_nu": 400, "charges": 30,
+                        "part_caf": 100, "date_entree": "2025-01-01"}],
+    }
+    migre, avertis = g.migrer_config(legacy)
+    assert migre["modules"].get("documents") is True, migre["modules"]
+    assert migre["locataires"][0]["identifiant"] == "Appt Z"
+    assert avertis, "des avertissements de migration étaient attendus"
+    f3 = tmp / "legacy.xlsx"
+    g.generer_workbook(g.valider_config(legacy), f3)
+    wb3 = load_workbook(f3)
+    assert "Appt Z" in wb3.sheetnames and "Quittance" in wb3.sheetnames, wb3.sheetnames
+
     print("SMOKE OK")
     return 0
 

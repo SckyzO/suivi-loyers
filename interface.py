@@ -295,6 +295,7 @@ class Application(tk.Tk):
 
     def _config(self) -> dict:
         return {
+            "version": moteur.CONFIG_VERSION,
             "bailleur": {"nom": self.var_nom.get().strip(), "adresse": self.var_adresse.get(),
                          "tel": self.var_tel.get(), "email": self.var_email.get()},
             "periode": {"annee_debut": self.var_debut.get(), "annee_fin": self.var_fin.get()},
@@ -330,12 +331,23 @@ class Application(tk.Tk):
             p = Path(chemin)
             if p.suffix.lower() in (".yaml", ".yml"):
                 import yaml
-                cfg = yaml.safe_load(p.read_text(encoding="utf-8"))
+                brut = yaml.safe_load(p.read_text(encoding="utf-8"))
             else:
-                cfg = json.loads(p.read_text(encoding="utf-8"))
+                brut = json.loads(p.read_text(encoding="utf-8"))
+            # Migration tolérante : convertit les anciennes versions sans planter.
+            cfg, avertis = moteur.migrer_config(brut)
             self._appliquer_config(cfg)
+            if avertis:
+                messagebox.showwarning(
+                    APP_TITRE,
+                    "Configuration chargée, avec quelques adaptations :\n\n• "
+                    + "\n• ".join(avertis)
+                    + "\n\nVérifiez les locataires et les options avant de générer.")
         except Exception as e:  # noqa: BLE001 - retour utilisateur
-            messagebox.showerror(APP_TITRE, f"Impossible de charger ce fichier :\n{e}")
+            messagebox.showerror(
+                APP_TITRE,
+                f"Impossible de charger ce fichier :\n{e}\n\n"
+                "Le fichier est peut-être corrompu ou n'est pas une configuration.")
 
     def _enregistrer(self) -> None:
         try:
