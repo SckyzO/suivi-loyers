@@ -30,7 +30,9 @@ import re
 import math
 import shutil
 import calendar
+import warnings
 import datetime as dt
+from dataclasses import dataclass
 from pathlib import Path
 
 # Chaîne numérique simple (autorise la virgule décimale d'une config éditée à la main).
@@ -59,26 +61,90 @@ FMT_EURO = '#,##0.00\\ "€"'
 FMT_DATE = "DD/MM/YYYY"
 FMT_PCT = "0.0%"
 
-COUL_ENTETE = "1F4E79"
-COUL_ENTETE_TXT = "FFFFFF"
-COUL_SAISIE = "FFF7E6"      # jaune pâle : cellules à remplir
-COUL_CALC = "EEF3F8"        # bleu très pâle : cellules calculées
-COUL_SOLDE = "C6EFCE"
-COUL_TROP = "FFEB9C"
-COUL_PARTIEL = "FFC7CE"
-COUL_ATTENTE = "E7E6E6"
+# --- Identité graphique : registre de thèmes sélectionnables --------------- #
+# Un thème = une entrée du registre (couleurs + onglets par rôle). La clé config
+# `theme` choisit l'entrée ; absente ou inconnue, on retombe sur le défaut
+# (« classique » = look historique). Tout le rendu lit l'objet `CHARTE` résolu au
+# début de generer_workbook, jamais des couleurs en dur : ajouter un thème ne
+# touche pas au cœur (extensibilité sans modification du cœur).
 
-# Couleurs d'onglet par rôle (cosmétique, aucun impact sur formules/plages).
-ONGLET_SYSTEME = "1F4E79"     # bleu : Guide, Locataires, Bilan, Tableau de bord, IRL, Régularisation
-ONGLET_LOCATAIRE = "548235"   # vert : feuilles de saisie locataire
-ONGLET_DOCUMENT = "C55A11"    # orange : Quittance, Avis d'échéance, Lettre de relance
-ONGLET_DONNEES = "808080"     # gris : Données (consolidée, masquée)
+POLICE_DEFAUT = "Tahoma"   # police d'origine sur tout Windows (Aptos non stock OS)
+
+THEMES: dict[str, dict] = {
+    "classique": {
+        "label": "Classique",
+        "fond": "FFFFFF",
+        "primaire": "1F4E79",   # bandeaux, titres, onglets « système »
+        "saisie": "FFF7E6",     # jaune pâle : cellules à remplir
+        "calc": "EEF3F8",       # bleu très pâle : cellules calculées
+        "solde": "C6EFCE",
+        "trop": "FFEB9C",
+        "partiel": "FFC7CE",
+        "attente": "E7E6E6",
+        "lien": "0563C1",       # bleu hyperlien
+        "locat": "548235",      # onglets feuilles locataire
+        "docs": "C55A11",       # onglets documents
+        "donnees": "808080",    # onglet Données (masqué)
+    },
+}
+THEME_DEFAUT = "classique"
+
+
+@dataclass(frozen=True)
+class Charte:
+    """Couleurs résolues d'un thème, lues par tout le rendu (aucune couleur en dur)."""
+    primaire: str
+    entete_txt: str
+    saisie: str
+    calc: str
+    solde: str
+    trop: str
+    partiel: str
+    attente: str
+    lien: str
+    onglet_systeme: str
+    onglet_locataire: str
+    onglet_document: str
+    onglet_donnees: str
+    fond: str
+    police: str
+
+
+def resoudre_charte(theme: str | None = None, police: str | None = None) -> Charte:
+    """Charte d'un thème. Thème absent → défaut ; inconnu → défaut + avertissement."""
+    if theme and theme not in THEMES:
+        warnings.warn(
+            f"Thème « {theme} » inconnu : utilisation du thème par défaut "
+            f"« {THEME_DEFAUT} ». Thèmes disponibles : {', '.join(sorted(THEMES))}.")
+        theme = None
+    t = THEMES[theme or THEME_DEFAUT]
+    return Charte(
+        primaire=t["primaire"],
+        entete_txt="FFFFFF",            # texte blanc sur bandeau, tous thèmes
+        saisie=t["saisie"],
+        calc=t["calc"],
+        solde=t["solde"],
+        trop=t["trop"],
+        partiel=t["partiel"],
+        attente=t["attente"],
+        lien=t["lien"],
+        onglet_systeme=t["primaire"],   # onglets système = couleur primaire
+        onglet_locataire=t["locat"],
+        onglet_document=t["docs"],
+        onglet_donnees=t["donnees"],
+        fond=t["fond"],
+        police=police or POLICE_DEFAUT,
+    )
+
+
+# Charte active. Défaut (look classique) au niveau module pour tout appel direct ;
+# generer_workbook la réassigne selon la config avant de construire les feuilles.
+CHARTE = resoudre_charte()
 
 # Échelle de titres unifiée et hauteur de la ligne d'en-tête (en-têtes sur 2 lignes).
 TITRE_H1 = 16
 TITRE_H2 = 12
 HAUTEUR_ENTETE = 30
-COUL_LIEN = "0563C1"          # bleu hyperlien
 
 # Valeurs officielles de l'IRL (série trimestrielle INSEE), à recopier dans l'onglet IRL.
 URL_IRL_INSEE = "https://www.insee.fr/fr/statistiques/serie/001515333"
@@ -413,15 +479,15 @@ def _ref(feuille: str, cellule: str) -> str:
 # --------------------------------------------------------------------------- #
 
 def style_entete(cell) -> None:
-    cell.font = Font(bold=True, color=COUL_ENTETE_TXT)
-    cell.fill = PatternFill("solid", fgColor=COUL_ENTETE)
+    cell.font = Font(bold=True, color=CHARTE.entete_txt)
+    cell.fill = PatternFill("solid", fgColor=CHARTE.primaire)
     cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     cell.border = BORDURE
 
 
 def style_titre(cell, niveau: int = TITRE_H1):
     """Titre d'onglet (TITRE_H1) ou de section (TITRE_H2), couleur d'identité."""
-    cell.font = Font(bold=True, size=niveau, color=COUL_ENTETE)
+    cell.font = Font(bold=True, size=niveau, color=CHARTE.primaire)
     return cell
 
 
@@ -461,7 +527,7 @@ def ecrire_lien(cell, texte: str, url: str):
     """Cellule hyperlien (texte cliquable, style lien)."""
     cell.value = texte
     cell.hyperlink = url
-    cell.font = Font(color=COUL_LIEN, underline="single")
+    cell.font = Font(color=CHARTE.lien, underline="single")
     return cell
 
 
@@ -478,9 +544,9 @@ def _formule_liste(valeurs) -> str:
 
 def style_cellule(cell, *, saisie=False, calc=False, fmt=None) -> None:
     if saisie:
-        cell.fill = PatternFill("solid", fgColor=COUL_SAISIE)
+        cell.fill = PatternFill("solid", fgColor=CHARTE.saisie)
     elif calc:
-        cell.fill = PatternFill("solid", fgColor=COUL_CALC)
+        cell.fill = PatternFill("solid", fgColor=CHARTE.calc)
     if fmt:
         cell.number_format = fmt
     cell.border = BORDURE
@@ -497,7 +563,7 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
 
     ws = wb.create_sheet("Locataires")
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.sheet_properties.tabColor = CHARTE.onglet_systeme
 
     # Colonne 1 = identité (clé pour RECHERCHEV / listes). Type de bien APRÈS l'adresse.
     cols: list[tuple[str, str]] = [
@@ -674,7 +740,7 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
         feuille = _nom_feuille(base, pris)
         ws = wb.create_sheet(feuille)
         ws.sheet_view.showGridLines = False
-        ws.sheet_properties.tabColor = ONGLET_LOCATAIRE
+        ws.sheet_properties.tabColor = CHARTE.onglet_locataire
         rloc = loc_index + 2  # ligne du locataire dans l'onglet Locataires
 
         style_titre(ecrire_texte(ws, 1, 2, ident_complet))
@@ -759,8 +825,8 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
         if rows_map:
             premier = PL_LIGNE_ENTETE + 1
             plage_statut = f"{L['statut']}{premier}:{L['statut']}{der}"
-            for texte, couleur in (("Soldé", COUL_SOLDE), ("Trop-perçu", COUL_TROP),
-                                   ("Partiel", COUL_PARTIEL), ("À encaisser", COUL_ATTENTE)):
+            for texte, couleur in (("Soldé", CHARTE.solde), ("Trop-perçu", CHARTE.trop),
+                                   ("Partiel", CHARTE.partiel), ("À encaisser", CHARTE.attente)):
                 ws.conditional_formatting.add(
                     plage_statut,
                     FormulaRule(formula=[f'${L["statut"]}{premier}="{texte}"'],
@@ -793,7 +859,7 @@ def construire_donnees(wb: Workbook, cfg: dict, feuilles: list[dict]) -> None:
 
     ws = wb.create_sheet("Données")
     ws.sheet_state = "hidden"
-    ws.sheet_properties.tabColor = ONGLET_DONNEES
+    ws.sheet_properties.tabColor = CHARTE.onglet_donnees
     for i, k in enumerate(cols, 1):
         ws.cell(1, i, k)
 
@@ -837,7 +903,7 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
     locs = cfg["locataires"]
     ws = wb.create_sheet("Bilan")
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.sheet_properties.tabColor = CHARTE.onglet_systeme
 
     cols = [("Locataire", 24), ("Total dû", 14), ("Total reçu", 14)]
     if caf:
@@ -885,9 +951,9 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
 
     plage_solde = f"{B['solde']}2:{B['solde']}{der}"
     ws.conditional_formatting.add(plage_solde, FormulaRule(
-        formula=[f"${B['solde']}2<-0.005"], fill=_fill_cf(COUL_PARTIEL)))
+        formula=[f"${B['solde']}2<-0.005"], fill=_fill_cf(CHARTE.partiel)))
     ws.conditional_formatting.add(plage_solde, FormulaRule(
-        formula=[f"${B['solde']}2>0.005"], fill=_fill_cf(COUL_TROP)))
+        formula=[f"${B['solde']}2>0.005"], fill=_fill_cf(CHARTE.trop)))
     ws.freeze_panes = "A2"
 
 
@@ -905,7 +971,7 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
 
     ws = wb.create_sheet("Révision IRL")
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.sheet_properties.tabColor = CHARTE.onglet_systeme
     for col, w in (("A", 24), ("B", 16), ("C", 16), ("D", 16), ("E", 14), ("F", 14),
                    ("G", 16), ("H", 14), ("I", 12)):
         ws.column_dimensions[col].width = w
@@ -1012,7 +1078,7 @@ def construire_tableau_bord(wb: Workbook, cfg: dict) -> None:
 
     ws = wb.create_sheet("Tableau de bord")
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.sheet_properties.tabColor = CHARTE.onglet_systeme
     style_titre(ws.cell(1, 1, "TABLEAU DE BORD"))
 
     cats = Reference(bilan, min_col=pos["nom"], min_row=2, max_row=fin)
@@ -1083,14 +1149,14 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
 
     ws = wb.create_sheet(spec["feuille"])
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_DOCUMENT
+    ws.sheet_properties.tabColor = CHARTE.onglet_document
     for col, w in (("A", 3), ("B", 26), ("C", 26), ("D", 16), ("E", 16)):
         ws.column_dimensions[col].width = w
 
     ws.merge_cells("B2:E2")
     titre = ws["B2"]
     titre.value = spec["titre"]
-    titre.font = Font(bold=True, size=18, color=COUL_ENTETE)
+    titre.font = Font(bold=True, size=18, color=CHARTE.primaire)
     titre.alignment = Alignment(horizontal="center")
 
     # Sélecteurs.
@@ -1101,7 +1167,7 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     for lab in ("B4", "B5", "D5"):
         ws[lab].font = Font(bold=True)
     for sel in ("C4", "C5", "E5"):
-        ws[sel].fill = PatternFill("solid", fgColor=COUL_SAISIE)
+        ws[sel].fill = PatternFill("solid", fgColor=CHARTE.saisie)
         ws[sel].border = BORDURE
 
     def valider(cellule: str, formule: str) -> None:
@@ -1222,7 +1288,7 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
 
     ws = wb.create_sheet("Régularisation charges")
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.sheet_properties.tabColor = CHARTE.onglet_systeme
     titres = [("Locataire", 24), ("Année", 10), ("Provisions appelées (€)", 20),
               ("Charges réelles (€)", 18), ("Solde (€)", 14), ("Sens", 28)]
     for i, (t, w) in enumerate(titres, 1):
@@ -1261,9 +1327,9 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
     der = r - 1
     if der >= 2:
         ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
-            formula=["$E2<-0.005"], fill=_fill_cf(COUL_PARTIEL)))
+            formula=["$E2<-0.005"], fill=_fill_cf(CHARTE.partiel)))
         ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
-            formula=["$E2>0.005"], fill=_fill_cf(COUL_TROP)))
+            formula=["$E2>0.005"], fill=_fill_cf(CHARTE.trop)))
         ws.auto_filter.ref = f"A1:F{der}"  # filtre par locataire / année
     ws.freeze_panes = "A2"
 
@@ -1275,7 +1341,7 @@ def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> Non
 def construire_guide(wb: Workbook, cfg: dict) -> None:
     ws = wb.create_sheet("Guide", 0)
     ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = ONGLET_SYSTEME
+    ws.sheet_properties.tabColor = CHARTE.onglet_systeme
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 16
     ws.column_dimensions["C"].width = 86
@@ -1290,8 +1356,8 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
     def section(row, titre):
         """Barre de section : titre blanc sur bandeau bleu (cohérent avec l'en-tête)."""
         c = fusion(row, titre)
-        c.font = Font(bold=True, size=TITRE_H2, color=COUL_ENTETE_TXT)
-        c.fill = PatternFill("solid", fgColor=COUL_ENTETE)
+        c.font = Font(bold=True, size=TITRE_H2, color=CHARTE.entete_txt)
+        c.fill = PatternFill("solid", fgColor=CHARTE.primaire)
         c.alignment = blanc_centre
         ws.row_dimensions[row].height = 22
         return row + 1
@@ -1303,7 +1369,7 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         chip.alignment = Alignment(horizontal="center", vertical="center")
         chip.border = BORDURE
         if texte_blanc:
-            chip.font = Font(bold=True, color=COUL_ENTETE_TXT)
+            chip.font = Font(bold=True, color=CHARTE.entete_txt)
         d = ws.cell(row, 3, desc)
         d.alignment = texte_wrap
         return row + 1
@@ -1313,20 +1379,20 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
     coord = " · ".join(str(b[k]) for k in ("adresse", "tel", "email") if b.get(k))
     for rr in range(1, 4):
         for cc in range(1, 4):
-            ws.cell(rr, cc).fill = PatternFill("solid", fgColor=COUL_ENTETE)
+            ws.cell(rr, cc).fill = PatternFill("solid", fgColor=CHARTE.primaire)
     titre = fusion(1, "Suivi des loyers")
-    titre.font = Font(bold=True, size=20, color=COUL_ENTETE_TXT)
+    titre.font = Font(bold=True, size=20, color=CHARTE.entete_txt)
     titre.alignment = blanc_centre
     ws.row_dimensions[1].height = 30
     sous = fusion(2, f"Bailleur : {b.get('nom', '')}")
-    sous.font = Font(bold=True, size=TITRE_H2, color=COUL_ENTETE_TXT)
+    sous.font = Font(bold=True, size=TITRE_H2, color=CHARTE.entete_txt)
     sous.alignment = blanc_centre
     ws.row_dimensions[2].height = 18
     cco = fusion(3)
     cco.alignment = blanc_centre
     if coord:
         _neutraliser(ws.cell(3, 2, coord))
-    cco.font = Font(italic=True, color=COUL_ENTETE_TXT)
+    cco.font = Font(italic=True, color=CHARTE.entete_txt)
     ws.row_dimensions[3].height = 16
 
     # --- Comment ça marche (stepper) ---
@@ -1356,29 +1422,29 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         etapes.append("Onglet « Révision IRL » : saisissez les indices IRL publiés ; le nouveau "
                       "loyer après révision se calcule seul (lien officiel ci-dessous).")
     for i, texte in enumerate(etapes, 1):
-        pastille(r, str(i), ONGLET_SYSTEME, texte, texte_blanc=True)
+        pastille(r, str(i), CHARTE.onglet_systeme, texte, texte_blanc=True)
         ws.row_dimensions[r].height = 30
         r += 1
     r += 1
 
     # --- Code couleur des onglets (rappelle la charte des onglets) ---
     r = section(r, "Repère des onglets")
-    r = pastille(r, "", ONGLET_SYSTEME,
+    r = pastille(r, "", CHARTE.onglet_systeme,
                  "Bleu : pilotage et synthèse (Guide, Tableau de bord, Locataires, Bilan…).")
-    r = pastille(r, "", ONGLET_LOCATAIRE,
+    r = pastille(r, "", CHARTE.onglet_locataire,
                  "Vert : une feuille de saisie par locataire (c'est là qu'on remplit chaque mois).")
     if cfg["modules"].get("documents"):
-        r = pastille(r, "", ONGLET_DOCUMENT,
+        r = pastille(r, "", CHARTE.onglet_document,
                      "Orange : documents à imprimer (quittance, avis d'échéance, relance).")
     r += 1
 
     # --- Légende des statuts ---
     r = section(r, "Légende des statuts")
     for nom, couleur, desc in (
-        ("Soldé", COUL_SOLDE, "Le total reçu couvre le total dû."),
-        ("Trop-perçu", COUL_TROP, "Reçu supérieur au dû (avance ou régularisation à prévoir)."),
-        ("Partiel", COUL_PARTIEL, "Reçu inférieur au dû (impayé partiel)."),
-        ("À encaisser", COUL_ATTENTE, "Aucun paiement saisi pour ce mois."),
+        ("Soldé", CHARTE.solde, "Le total reçu couvre le total dû."),
+        ("Trop-perçu", CHARTE.trop, "Reçu supérieur au dû (avance ou régularisation à prévoir)."),
+        ("Partiel", CHARTE.partiel, "Reçu inférieur au dû (impayé partiel)."),
+        ("À encaisser", CHARTE.attente, "Aucun paiement saisi pour ce mois."),
     ):
         r = pastille(r, nom, couleur, desc)
 
@@ -1506,6 +1572,10 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
                      orphelins_out: list | None = None) -> Path:
     cfg = valider_config(cfg) if "annee_debut" not in cfg else cfg
     sortie = Path(sortie)
+
+    # Identité graphique : résout la charte active pour toute la génération.
+    global CHARTE
+    CHARTE = resoudre_charte(cfg.get("theme"), cfg.get("police"))
 
     # Un seul chargement du classeur existant pour récolter toutes les saisies.
     saisies, saisies_reg, saisies_irl = {}, {}, {}

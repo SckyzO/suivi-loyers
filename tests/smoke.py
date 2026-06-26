@@ -66,16 +66,18 @@ def main() -> int:
     assert wb["Avis d'échéance"]["B2"].value == "AVIS D'ÉCHÉANCE"
 
     # Charte : couleur d'onglet par rôle (bleu système / vert locataire / orange document /
-    # gris Données) et gridlines masquées partout. Suit les constantes du moteur.
+    # gris Données) et gridlines masquées partout. Suit la charte résolue du moteur
+    # (thème par défaut = « classique »).
+    ch = g.resoudre_charte()
     def couleur_onglet(nom):
         tc = wb[nom].sheet_properties.tabColor
         return tc.rgb[-6:] if tc and tc.rgb else None
-    role = {"Guide": g.ONGLET_SYSTEME, "Locataires": g.ONGLET_SYSTEME, "Bilan": g.ONGLET_SYSTEME,
-            "Tableau de bord": g.ONGLET_SYSTEME, "Régularisation charges": g.ONGLET_SYSTEME,
-            "Révision IRL": g.ONGLET_SYSTEME, "Données": g.ONGLET_DONNEES,
-            "Appt 1 - Alice": g.ONGLET_LOCATAIRE, "Appt 2 - Bob": g.ONGLET_LOCATAIRE,
-            "Quittance": g.ONGLET_DOCUMENT, "Avis d'échéance": g.ONGLET_DOCUMENT,
-            "Lettre de relance": g.ONGLET_DOCUMENT}
+    role = {"Guide": ch.onglet_systeme, "Locataires": ch.onglet_systeme, "Bilan": ch.onglet_systeme,
+            "Tableau de bord": ch.onglet_systeme, "Régularisation charges": ch.onglet_systeme,
+            "Révision IRL": ch.onglet_systeme, "Données": ch.onglet_donnees,
+            "Appt 1 - Alice": ch.onglet_locataire, "Appt 2 - Bob": ch.onglet_locataire,
+            "Quittance": ch.onglet_document, "Avis d'échéance": ch.onglet_document,
+            "Lettre de relance": ch.onglet_document}
     for nom, attendu in role.items():
         assert couleur_onglet(nom) == attendu, (nom, couleur_onglet(nom), attendu)
     for nom in wb.sheetnames:
