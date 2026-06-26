@@ -1,0 +1,20 @@
+# Exemple « bailleur minimal » : pas de CAF, pas de distinction loyer nu / charges.
+# Vérifie la modularité (colonnes et onglets s'adaptent).
+
+bailleur:
+  nom: "M. Petit"
+
+periode:
+  annee_debut: 2025
+  annee_fin: 2025
+
+modules:
+  loyer_nu_charges: false
+  caf: false
+  depot_garantie: false
+
+locataires:
+  - nom: "Lefevre Paul"
+    bien: "Maison - 3 impasse du Clos"
+    loyer: 750
+    date_entree: 2025-01-01

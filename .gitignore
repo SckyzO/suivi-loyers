@@ -1,0 +1,15 @@
+# Sorties générées
+sorties/
+*.xlsx
+
+# Artefacts de build PyInstaller (Windows)
+build/
+dist/
+*.spec
+.buildenv/
+
+# Environnements / caches Python
+.venv/
+__pycache__/
+*.pyc
+test_config.py

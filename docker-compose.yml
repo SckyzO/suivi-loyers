@@ -1,0 +1,14 @@
+# Génération des classeurs via Docker Compose.
+#
+#   docker compose build
+#   docker compose run --rm suivi configs/exemple.yaml
+#   docker compose run --rm suivi configs/minimal.yaml
+#
+# Les fichiers .xlsx sont écrits dans ./sorties (monté en écriture).
+services:
+  suivi:
+    build: .
+    image: suivi-loyers:latest
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./sorties:/app/sorties

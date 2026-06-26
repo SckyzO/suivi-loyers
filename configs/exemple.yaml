@@ -1,0 +1,43 @@
+# Exemple de configuration « bailleur complet » (tous les modules de la phase 1).
+# Sert de base pour les tests ; l'interface graphique produit le même type de config.
+
+bailleur:
+  nom: "SCI Les Tilleuls"
+  adresse: "12 rue des Lilas, 35000 Rennes"
+  tel: "06 12 34 56 78"
+  email: "contact@les-tilleuls.fr"
+
+periode:
+  annee_debut: 2024
+  annee_fin: 2026
+
+modules:
+  loyer_nu_charges: true   # sépare loyer nu / provision charges
+  caf: true                # colonnes part CAF (tiers payant)
+  depot_garantie: true
+
+locataires:
+  - nom: "Martin Sophie"
+    bien: "Appt A1 - 12 rue des Lilas"
+    loyer_nu: 480
+    charges: 50
+    part_caf: 210
+    depot_garantie: 480
+    date_entree: 2024-01-01
+
+  - nom: "Durand Karim"
+    bien: "Appt A2 - 12 rue des Lilas"
+    loyer_nu: 520
+    charges: 60
+    part_caf: 0
+    depot_garantie: 520
+    date_entree: 2024-03-15
+
+  # Rotation : ce locataire remplace un départ dans le même logement en cours d'année.
+  - nom: "Nguyen Lina"
+    bien: "Studio B - 14 rue des Lilas"
+    loyer_nu: 390
+    charges: 40
+    part_caf: 180
+    depot_garantie: 390
+    date_entree: 2025-07-01
