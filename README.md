@@ -57,6 +57,14 @@ Si l'option *Documents à imprimer* est activée, le classeur a trois onglets : 
 texte) et s'imprime. La quittance ne vaut que si le loyer est intégralement réglé pour la
 période ; sinon elle le signale et vaut reçu du montant versé.
 
+### Régulariser les charges en fin d'année
+
+Si l'option *Régularisation annuelle des charges* est activée, le classeur a un onglet
+**Régularisation charges**. Pour chaque locataire et chaque année, il affiche les provisions
+appelées (calculées automatiquement) ; saisissez les **charges réelles** dans la case jaune et
+le **solde** s'affiche, avec le sens à appliquer (à rembourser au locataire ou complément à
+demander).
+
 ### Changer de locataire plus tard
 
 Les locataires changent souvent : c'est prévu. Relancez `SuiviLoyers.exe`, cliquez sur

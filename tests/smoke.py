@@ -16,7 +16,7 @@ CFG_COMPLET = {
     "bailleur": {"nom": "Smoke Complet"},
     "periode": {"annee_debut": 2024, "annee_fin": 2025},
     "modules": {"loyer_nu_charges": True, "caf": True, "depot_garantie": True,
-                "documents": True},
+                "documents": True, "regularisation_charges": True},
     "locataires": [
         {"nom": "Alice", "type_bien": "Appartement", "identifiant": "Appt 1",
          "adresse": "1 rue A", "loyer_nu": 500, "charges": 50, "part_caf": 200,
@@ -53,7 +53,7 @@ def main() -> int:
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
     attendus = ["Guide", "Locataires", "Appt 1", "Appt 2", "Données", "Bilan",
-                "Quittance", "Avis d'échéance", "Lettre de relance"]
+                "Régularisation charges", "Quittance", "Avis d'échéance", "Lettre de relance"]
     assert wb.sheetnames == attendus, wb.sheetnames
     assert wb["Données"].sheet_state == "hidden"
     assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
@@ -110,6 +110,23 @@ def main() -> int:
             trouve = ws.cell(r, ent["Part locataire reçue"]).value
             break
     assert trouve == 333, f"saisie non préservée: {trouve}"
+
+    # 5) Régularisation : saisie d'une charge réelle, préservée après régénération.
+    wb = load_workbook(f1)
+    reg = wb["Régularisation charges"]
+    ent = {reg.cell(1, c).value: c for c in range(1, reg.max_column + 1)}
+    reg.cell(2, ent["Charges réelles (€)"]).value = 612
+    cle_reg = (reg.cell(2, ent["Locataire"]).value, reg.cell(2, ent["Année"]).value)
+    wb.save(f1)
+    g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True)
+    reg = load_workbook(f1)["Régularisation charges"]
+    ent = {reg.cell(1, c).value: c for c in range(1, reg.max_column + 1)}
+    val = None
+    for r in range(2, reg.max_row + 1):
+        if (reg.cell(r, ent["Locataire"]).value, reg.cell(r, ent["Année"]).value) == cle_reg:
+            val = reg.cell(r, ent["Charges réelles (€)"]).value
+            break
+    assert val == 612, f"charge réelle non préservée: {val}"
 
     print("SMOKE OK")
     return 0

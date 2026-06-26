@@ -70,7 +70,7 @@ TYPES_BIEN = ["Appartement", "Maison"]
 COLS_SAISIE = ("caf_recu", "caf_date", "loc_recu", "loc_date")
 
 # Feuilles « système » (tout le reste = une feuille locataire).
-FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan",
+FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan", "Régularisation charges",
                     "Quittance", "Avis d'échéance", "Lettre de relance"}
 
 MODULES_DEFAUT = {
@@ -708,6 +708,56 @@ def construire_documents(wb: Workbook, cfg: dict, ref_loc: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Onglet Régularisation des charges (annuelle, par locataire)
+# --------------------------------------------------------------------------- #
+
+def construire_regularisation(wb: Workbook, cfg: dict, saisies_reg: dict) -> None:
+    # Sans distinction loyer nu / charges, il n'y a pas de provisions à régulariser.
+    if not (cfg["modules"].get("regularisation_charges") and cfg["modules"]["loyer_nu_charges"]):
+        return
+
+    ws = wb.create_sheet("Régularisation charges")
+    titres = [("Locataire", 24), ("Année", 10), ("Provisions appelées (€)", 20),
+              ("Charges réelles (€)", 18), ("Solde (€)", 14), ("Sens", 28)]
+    for i, (t, w) in enumerate(titres, 1):
+        style_entete(ws.cell(1, i, t))
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    r = 2
+    for loc in cfg["locataires"]:
+        nom = loc.get("nom")
+        annees = sorted({a for (a, _) in _mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"])})
+        for annee in annees:
+            ws.cell(r, 1, nom).border = BORDURE
+            ca = ws.cell(r, 2, annee)
+            ca.number_format = "0"
+            ca.border = BORDURE
+            cp = ws.cell(r, 3, f"=SUMIFS(Suivi_ChargesDu,Suivi_Locataire,$A{r},Suivi_Annee,$B{r})")
+            cp.number_format = FMT_EURO
+            cp.border = BORDURE
+            cr = ws.cell(r, 4)
+            v = saisies_reg.get((str(nom), int(annee)))
+            if v not in (None, ""):
+                cr.value = v
+            style_cellule(cr, saisie=True, fmt=FMT_EURO)
+            cs = ws.cell(r, 5, f"=C{r}-D{r}")
+            cs.number_format = FMT_EURO
+            cs.border = BORDURE
+            csens = ws.cell(r, 6, f'=IF(D{r}=0,"Charges réelles à saisir",'
+                                  f'IF(ABS(C{r}-D{r})<=0.005,"Équilibré",'
+                                  f'IF(C{r}>D{r},"À rembourser au locataire","Complément à demander")))')
+            csens.border = BORDURE
+            r += 1
+    der = r - 1
+    if der >= 2:
+        ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
+            formula=["$E2<-0.005"], fill=PatternFill("solid", fgColor=COUL_PARTIEL)))
+        ws.conditional_formatting.add(f"E2:E{der}", FormulaRule(
+            formula=["$E2>0.005"], fill=PatternFill("solid", fgColor=COUL_TROP)))
+    ws.freeze_panes = "A2"
+
+
+# --------------------------------------------------------------------------- #
 # Onglet Guide
 # --------------------------------------------------------------------------- #
 
@@ -738,6 +788,10 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         ("5.", "Documents à imprimer : choisissez le locataire et la période dans les listes "
                "déroulantes ; le document se remplit seul."),
     ]
+    if cfg["modules"].get("regularisation_charges") and cfg["modules"]["loyer_nu_charges"]:
+        items.append(
+            ("6.", "Onglet « Régularisation charges » : saisissez les charges réelles annuelles ; "
+                   "le solde par locataire (à rembourser ou à compléter) se calcule seul."))
     ws.cell(r, 2, "Mode d'emploi").font = Font(bold=True, size=13, color=COUL_ENTETE)
     r += 1
     for a, t in items:
@@ -815,6 +869,27 @@ def recolter_saisies(chemin_xlsx: Path) -> dict:
     return saisies
 
 
+def recolter_regularisation(chemin_xlsx: Path) -> dict:
+    """Charges réelles déjà saisies : (nom, année) -> montant."""
+    chemin_xlsx = Path(chemin_xlsx)
+    if not chemin_xlsx.is_file():
+        return {}
+    wb = load_workbook(chemin_xlsx, data_only=False)
+    if "Régularisation charges" not in wb.sheetnames:
+        return {}
+    ws = wb["Régularisation charges"]
+    ent = {ws.cell(1, c).value: c for c in range(1, ws.max_column + 1)}
+    cL, cA, cR = ent.get("Locataire"), ent.get("Année"), ent.get("Charges réelles (€)")
+    if not all((cL, cA, cR)):
+        return {}
+    res: dict = {}
+    for r in range(2, ws.max_row + 1):
+        nom, an, v = ws.cell(r, cL).value, ws.cell(r, cA).value, ws.cell(r, cR).value
+        if nom and an not in (None, "") and v not in (None, ""):
+            res[(str(nom), int(an))] = v
+    return res
+
+
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
@@ -823,6 +898,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     cfg = valider_config(cfg) if "annee_debut" not in cfg else cfg
     sortie = Path(sortie)
     saisies = recolter_saisies(sortie) if preserver else {}
+    saisies_reg = recolter_regularisation(sortie) if preserver else {}
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -831,6 +907,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True) -> Path
     feuilles = construire_feuilles_locataires(wb, cfg, ref_loc, saisies)
     construire_donnees(wb, cfg, feuilles)
     construire_bilan(wb, cfg)
+    construire_regularisation(wb, cfg, saisies_reg)
     if cfg["modules"].get("documents"):
         construire_documents(wb, cfg, ref_loc)
     construire_guide(wb, cfg)
