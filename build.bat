@@ -49,7 +49,10 @@ echo ===================================================================
 echo  Termine. L'executable se trouve ici : dist\SuiviLoyers.exe
 echo  Vous pouvez le copier ou vous voulez et le lancer par double-clic.
 echo ===================================================================
-pause
+echo.
+set REP=O
+set /p REP=Lancer l'application maintenant ? (O/N) [O] :
+if /I not "%REP%"=="N" start "" "dist\SuiviLoyers.exe"
 exit /b 0
 
 :erreur
