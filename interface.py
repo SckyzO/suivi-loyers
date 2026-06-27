@@ -328,14 +328,40 @@ class Application(tk.Tk):
         self._style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
 
     def _construire(self) -> None:
-        ttk.Label(self, text="Générateur de suivi des loyers", style="Titre.TLabel").pack(
-            anchor="w", padx=14, pady=(12, 0))
-        ttk.Label(self, style="SousTitre.TLabel",
+        # ---- En-tête : titre + sous-titre à gauche, bascule d'affichage à droite ----
+        header = ttk.Frame(self)
+        header.pack(side="top", fill="x", padx=14, pady=(12, 4))
+        titres = ttk.Frame(header)
+        titres.pack(side="left", anchor="w")
+        ttk.Label(titres, text="Générateur de suivi des loyers", style="Titre.TLabel").pack(anchor="w")
+        ttk.Label(titres, style="SousTitre.TLabel",
                   text="Remplissez le formulaire puis cliquez « Générer le fichier Excel ». "
-                       "Aucune connaissance technique requise.").pack(anchor="w", padx=14, pady=(0, 6))
+                       "Aucune connaissance technique requise.").pack(anchor="w")
+        # Bascule d'affichage (segmented control via le style Toggle de sv-ttk ; radio classiques
+        # en repli). value = libellé, car var_apparence stocke le libellé (cf. _appliquer_theme_fenetre).
+        seg = ttk.Frame(header)
+        seg.pack(side="right", anchor="e")
+        ttk.Label(seg, text="Affichage :", style="SousTitre.TLabel").pack(side="left", padx=(0, 6))
+        for _cle, label in WINDOW_THEMES:
+            ttk.Radiobutton(seg, text=label, value=label, variable=self.var_apparence,
+                            command=self._appliquer_theme_fenetre, style="Toggle.TButton",
+                            takefocus=False).pack(side="left")
 
-        bf = ttk.LabelFrame(self, text="Bailleur", style="Section.TLabelframe")
-        bf.pack(fill="x", padx=14, pady=6)
+        # ---- Pied collant (posé avant le corps pour rester ancré en bas) ----
+        af = ttk.Frame(self)
+        af.pack(side="bottom", fill="x", padx=14, pady=(6, 12))
+        ttk.Button(af, text="Charger une config…", command=self._charger).pack(side="left")
+        ttk.Button(af, text="Enregistrer la config…", command=self._enregistrer).pack(side="left", padx=6)
+        self.var_save_config = tk.BooleanVar(value=True)
+        ttk.Checkbutton(af, text="Enregistrer aussi la configuration",
+                        variable=self.var_save_config).pack(side="left", padx=(16, 0))
+        ttk.Button(af, text="Générer le fichier Excel", command=self._generer,
+                   style="Accent.TButton").pack(side="right")
+
+        # ---- Corps : bandeau de réglages (haut) + liste locataires (bas, extensible) ----
+        body = ttk.Frame(self)
+        body.pack(side="top", fill="both", expand=True, padx=14, pady=4)
+
         self.var_nom = tk.StringVar()
         self.var_prenom = tk.StringVar()
         self.var_sci = tk.BooleanVar(value=False)
@@ -343,40 +369,8 @@ class Application(tk.Tk):
         self.var_adresse = tk.StringVar()
         self.var_tel = tk.StringVar()
         self.var_email = tk.StringVar()
-
-        def champ(r, c, lab, var):
-            ttk.Label(bf, text=lab).grid(row=r, column=c * 2, sticky="w", padx=8, pady=4)
-            ttk.Entry(bf, textvariable=var, width=30).grid(row=r, column=c * 2 + 1, padx=8, pady=4)
-
-        champ(0, 0, "Nom *", self.var_nom)
-        champ(0, 1, "Prénom", self.var_prenom)
-        ttk.Checkbutton(bf, text="SCI", variable=self.var_sci, command=self._maj_sci).grid(
-            row=1, column=0, sticky="w", padx=8, pady=4)
-        self.ent_sci = ttk.Entry(bf, textvariable=self.var_sci_nom, width=30)
-        self.ent_sci.grid(row=1, column=1, padx=8, pady=4)
-        ttk.Label(bf, text="nom de la SCI", foreground="#666").grid(
-            row=1, column=2, sticky="w", padx=4)
-        champ(2, 0, "Adresse", self.var_adresse)
-        champ(2, 1, "Téléphone", self.var_tel)
-        champ(3, 0, "E-mail", self.var_email)
-        self._maj_sci()
-
-        pm = ttk.Frame(self)
-        pm.pack(fill="x", padx=14, pady=6)
-
-        pf = ttk.LabelFrame(pm, text="Période", style="Section.TLabelframe")
-        pf.pack(side="left", fill="y")
         self.var_debut = tk.IntVar(value=ANNEE)
         self.var_fin = tk.IntVar(value=ANNEE + 2)
-        ttk.Label(pf, text="Année début").grid(row=0, column=0, padx=8, pady=4, sticky="w")
-        ttk.Spinbox(pf, from_=2000, to=2100, textvariable=self.var_debut, width=8).grid(
-            row=0, column=1, padx=8, pady=4)
-        ttk.Label(pf, text="Année fin").grid(row=1, column=0, padx=8, pady=4, sticky="w")
-        ttk.Spinbox(pf, from_=2000, to=2100, textvariable=self.var_fin, width=8).grid(
-            row=1, column=1, padx=8, pady=4)
-
-        mf = ttk.LabelFrame(pm, text="Options à inclure", style="Section.TLabelframe")
-        mf.pack(side="left", fill="both", expand=True, padx=(10, 0))
         self.var_caf = tk.BooleanVar(value=True)
         self.var_depot = tk.BooleanVar(value=True)
         self.var_documents = tk.BooleanVar(value=True)
@@ -384,78 +378,92 @@ class Application(tk.Tk):
         self.var_irl = tk.BooleanVar(value=True)
         self.var_tableau = tk.BooleanVar(value=True)
         self.var_mode = tk.StringVar(value=MODE_LABEL["comprises"])
-
-        frm = ttk.Frame(mf)
-        frm.pack(anchor="w", padx=8, pady=2, fill="x")
-        ttk.Label(frm, text="Loyer / charges :").pack(side="left")
-        ttk.Combobox(frm, textvariable=self.var_mode, values=[lbl for _, lbl in MODES],
-                     state="readonly", width=26).pack(side="left", padx=4)
-        ttk.Checkbutton(mf, text="Suivre la part CAF (tiers payant)",
-                        variable=self.var_caf).pack(anchor="w", padx=8, pady=1)
-        ttk.Checkbutton(mf, text="Suivre le dépôt de garantie",
-                        variable=self.var_depot).pack(anchor="w", padx=8, pady=1)
-        ttk.Checkbutton(mf, text="Documents à imprimer (quittance, avis, relance)",
-                        variable=self.var_documents).pack(anchor="w", padx=8, pady=1)
-        ttk.Checkbutton(mf, text="Tableau de bord (graphiques)",
-                        variable=self.var_tableau).pack(anchor="w", padx=8, pady=1)
-        ttk.Checkbutton(mf, text="Régularisation annuelle des charges",
-                        variable=self.var_regul).pack(anchor="w", padx=8, pady=1)
-        ttk.Checkbutton(mf, text="Révision IRL (loyer revalorisé répercuté dans le suivi)",
-                        variable=self.var_irl).pack(anchor="w", padx=8, pady=1)
-
-        apf = ttk.LabelFrame(self, text="Apparence", style="Section.TLabelframe")
-        apf.pack(fill="x", padx=14, pady=6)
         self.var_theme = tk.StringVar(value=THEME_LABEL[moteur.THEME_DEFAUT])
         self.var_police = tk.StringVar(value=moteur.POLICE_DEFAUT)
-        ttk.Label(apf, text="Thème (couleurs)").grid(row=0, column=0, padx=8, pady=6, sticky="w")
-        ttk.Combobox(apf, textvariable=self.var_theme,
-                     values=[THEME_LABEL[t] for t in moteur.THEMES],
-                     state="readonly", width=22).grid(row=0, column=1, padx=8, pady=6, sticky="w")
-        ttk.Label(apf, text="Police").grid(row=0, column=2, padx=(24, 8), pady=6, sticky="w")
-        ttk.Combobox(apf, textvariable=self.var_police, values=POLICES,
-                     state="readonly", width=18).grid(row=0, column=3, padx=8, pady=6, sticky="w")
-        # Affichage de la fenêtre (clair / sombre / suit Windows) — distinct du thème du classeur.
-        ttk.Label(apf, text="Fenêtre").grid(row=1, column=0, padx=8, pady=(0, 8), sticky="w")
-        cb_app = ttk.Combobox(apf, textvariable=self.var_apparence,
-                              values=[lbl for _, lbl in WINDOW_THEMES],
-                              state="readonly" if HAS_SVTTK else "disabled", width=22)
-        cb_app.grid(row=1, column=1, padx=8, pady=(0, 8), sticky="w")
-        cb_app.bind("<<ComboboxSelected>>", self._appliquer_theme_fenetre)
-        if not HAS_SVTTK:
-            ttk.Label(apf, text="(thème clair/sombre indisponible : sv-ttk non installé)",
-                      style="SousTitre.TLabel").grid(row=1, column=2, columnspan=2,
-                                                     padx=8, sticky="w")
 
-        lf = ttk.LabelFrame(self, text="Locataires", style="Section.TLabelframe")
-        lf.pack(fill="both", expand=True, padx=14, pady=6)
+        def ligne(parent, r, label, widget):
+            """Ligne label/champ alignée : labels en colonne 0, champ étiré en colonne 1."""
+            ttk.Label(parent, text=label).grid(row=r, column=0, sticky="w", padx=(8, 6), pady=4)
+            widget.grid(row=r, column=1, sticky="ew", padx=(0, 8), pady=4)
+            parent.columnconfigure(1, weight=1)
+            return widget
+
+        # Bandeau de réglages : 3 colonnes (Bailleur · Contenu · Période+Apparence).
+        reglages = ttk.Frame(body)
+        reglages.pack(fill="x")
+        for col, poids in ((0, 3), (1, 3), (2, 2)):
+            reglages.columnconfigure(col, weight=poids, uniform="reglages")
+
+        # -- Bailleur (colonne 0) --
+        bf = ttk.LabelFrame(reglages, text="Bailleur", style="Section.TLabelframe")
+        bf.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
+        ligne(bf, 0, "Nom *", ttk.Entry(bf, textvariable=self.var_nom))
+        ligne(bf, 1, "Prénom", ttk.Entry(bf, textvariable=self.var_prenom))
+        ttk.Checkbutton(bf, text="Le bailleur est une SCI", variable=self.var_sci,
+                        command=self._maj_sci).grid(row=2, column=0, columnspan=2,
+                                                    sticky="w", padx=8, pady=(6, 2))
+        self.ent_sci = ligne(bf, 3, "Nom de la SCI", ttk.Entry(bf, textvariable=self.var_sci_nom))
+        ligne(bf, 4, "Adresse", ttk.Entry(bf, textvariable=self.var_adresse))
+        ligne(bf, 5, "Téléphone", ttk.Entry(bf, textvariable=self.var_tel))
+        ligne(bf, 6, "E-mail", ttk.Entry(bf, textvariable=self.var_email))
+        self._maj_sci()
+
+        # -- Contenu du classeur (colonne 1) --
+        mf = ttk.LabelFrame(reglages, text="Contenu du classeur", style="Section.TLabelframe")
+        mf.grid(row=0, column=1, sticky="nsew", padx=7)
+        ligne(mf, 0, "Loyer / charges",
+              ttk.Combobox(mf, textvariable=self.var_mode, values=[lbl for _, lbl in MODES],
+                           state="readonly"))
+        options = [("Suivre la part CAF (tiers payant)", self.var_caf),
+                   ("Suivre le dépôt de garantie", self.var_depot),
+                   ("Documents (quittance, avis, relance)", self.var_documents),
+                   ("Tableau de bord (graphiques)", self.var_tableau),
+                   ("Régularisation annuelle des charges", self.var_regul),
+                   ("Révision IRL (loyer revalorisé répercuté)", self.var_irl)]
+        for i, (txt, var) in enumerate(options, start=1):
+            ttk.Checkbutton(mf, text=txt, variable=var).grid(
+                row=i, column=0, columnspan=2, sticky="w", padx=8, pady=1)
+
+        # -- Période + Apparence du classeur (colonne 2, empilées) --
+        col2 = ttk.Frame(reglages)
+        col2.grid(row=0, column=2, sticky="nsew", padx=(7, 0))
+        col2.columnconfigure(0, weight=1)
+        pf = ttk.LabelFrame(col2, text="Période", style="Section.TLabelframe")
+        pf.grid(row=0, column=0, sticky="ew")
+        ligne(pf, 0, "Année début",
+              ttk.Spinbox(pf, from_=2000, to=2100, textvariable=self.var_debut))
+        ligne(pf, 1, "Année fin",
+              ttk.Spinbox(pf, from_=2000, to=2100, textvariable=self.var_fin))
+        apf = ttk.LabelFrame(col2, text="Apparence du classeur", style="Section.TLabelframe")
+        apf.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        ligne(apf, 0, "Thème",
+              ttk.Combobox(apf, textvariable=self.var_theme,
+                           values=[THEME_LABEL[t] for t in moteur.THEMES], state="readonly"))
+        ligne(apf, 1, "Police",
+              ttk.Combobox(apf, textvariable=self.var_police, values=POLICES, state="readonly"))
+
+        # -- Locataires : pleine largeur, sous le bandeau, extensible en hauteur --
+        lf = ttk.LabelFrame(body, text="Locataires", style="Section.TLabelframe")
+        lf.pack(fill="both", expand=True, pady=(10, 0))
+        barre = ttk.Frame(lf)
+        barre.pack(fill="x", padx=8, pady=(8, 4))
+        ttk.Button(barre, text="Ajouter", command=self._ajouter_locataire,
+                   style="Accent.TButton").pack(side="left")
+        ttk.Button(barre, text="Modifier", command=self._modifier_locataire).pack(side="left", padx=6)
+        ttk.Button(barre, text="Supprimer", command=self._supprimer_locataire).pack(side="left")
+
+        zone = ttk.Frame(lf)
+        zone.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         cols = [c[0] for c in self.COLS]
-        self.tree = ttk.Treeview(lf, columns=cols, show="headings", height=8)
+        self.tree = ttk.Treeview(zone, columns=cols, show="headings", height=8)
         for cle, titre, larg in self.COLS:
             self.tree.heading(cle, text=titre)
-            self.tree.column(cle, width=larg, anchor="w")
-        self.tree.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
+            self.tree.column(cle, width=larg, anchor="e" if cle == "loyer" else "w")
+        self.tree.pack(side="left", fill="both", expand=True)
         self.tree.bind("<Double-1>", lambda e: self._modifier_locataire())
-        sb = ttk.Scrollbar(lf, orient="vertical", command=self.tree.yview)
-        sb.pack(side="left", fill="y", pady=8)
+        sb = ttk.Scrollbar(zone, orient="vertical", command=self.tree.yview)
+        sb.pack(side="left", fill="y")
         self.tree.configure(yscrollcommand=sb.set)
-
-        bl = ttk.Frame(lf)
-        bl.pack(side="left", fill="y", padx=8, pady=8)
-        ttk.Button(bl, text="Ajouter", command=self._ajouter_locataire).pack(fill="x", pady=3)
-        ttk.Button(bl, text="Modifier", command=self._modifier_locataire).pack(fill="x", pady=3)
-        ttk.Button(bl, text="Supprimer", command=self._supprimer_locataire).pack(fill="x", pady=3)
-
-        af = ttk.Frame(self)
-        af.pack(fill="x", padx=14, pady=(4, 14))
-        ttk.Button(af, text="Charger une config…", command=self._charger).pack(side="left")
-        ttk.Button(af, text="Enregistrer la config…", command=self._enregistrer).pack(
-            side="left", padx=6)
-        self.var_save_config = tk.BooleanVar(value=True)
-        ttk.Checkbutton(af, text="Enregistrer aussi la configuration",
-                        variable=self.var_save_config).pack(side="left", padx=(16, 0))
-        # Action principale mise en avant (style accentué si sv-ttk est présent).
-        ttk.Button(af, text="Générer le fichier Excel", command=self._generer,
-                   style="Accent.TButton").pack(side="right")
 
     # ------------------------- gestion locataires ------------------------- #
 
