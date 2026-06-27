@@ -998,7 +998,7 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                 rows_map[(annee, m)] = r
                 r += 1
 
-            # Ligne « Total <année> ».
+            # Ligne « Total <année> » : surlignée dans la teinte du thème, pleine largeur.
             tot = ws.cell(r, col_de["mois"], f"Total {annee}")
             tot.font = Font(bold=True)
             for key in cols_total:
@@ -1006,6 +1006,9 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                 cc.number_format = FMT_EURO
                 cc.font = Font(bold=True)
                 cc.border = BORDURE
+            fill_total = PatternFill("solid", fgColor=CHARTE.calc)
+            for c in range(1, max(col_de.values()) + 1):
+                ws.cell(r, c).fill = fill_total
             r += 2  # total + une ligne vide de séparation
 
         der = r - 1
@@ -1127,6 +1130,7 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
     c = ws.cell(total_r, pos["taux"], f'=IFERROR({B["recu"]}{total_r}/{B["du"]}{total_r},"")')
     c.font = Font(bold=True)
 
+    fill_total = PatternFill("solid", fgColor=CHARTE.calc)
     for r in range(2, total_r + 1):
         for k in keys:
             cell = ws.cell(r, pos[k])
@@ -1135,6 +1139,8 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
             elif k != "nom":
                 cell.number_format = FMT_EURO
             cell.border = BORDURE
+            if r == total_r:
+                cell.fill = fill_total
 
     plage_solde = f"{B['solde']}2:{B['solde']}{der}"
     ws.conditional_formatting.add(plage_solde, FormulaRule(

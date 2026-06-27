@@ -401,6 +401,19 @@ def main() -> int:
         assert wsl.page_setup.fitToWidth == 1 and wsl.page_setup.fitToHeight == 0, nom
         assert wsl.sheet_properties.pageSetUpPr and wsl.sheet_properties.pageSetUpPr.fitToPage, nom
 
+    # 12) Cohérence design : lignes de total surlignées à la teinte du thème (Bilan + locataire).
+    calc6 = g.resoudre_charte().calc
+    def _f6(c):
+        fg = c.fill.fgColor
+        return fg.rgb[-6:] if fg and fg.rgb and fg.rgb != "00000000" else None
+    bil = wd9["Bilan"]
+    rtot = next((r for r in range(1, bil.max_row + 1) if bil.cell(r, 1).value == "TOTAL"), None)
+    assert rtot and _f6(bil.cell(rtot, 2)) == calc6, ("Bilan TOTAL non surligné", rtot)
+    locsheet = wd9["Appt 1 - Alice"]
+    rann = next((r for r in range(1, locsheet.max_row + 1)
+                 if str(locsheet.cell(r, 3).value or "").startswith("Total ")), None)
+    assert rann and _f6(locsheet.cell(rann, 3)) == calc6, ("Total année locataire non surligné", rann)
+
     print("SMOKE OK")
     return 0
 
