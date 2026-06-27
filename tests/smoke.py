@@ -393,6 +393,14 @@ def main() -> int:
             xml = z.read(n).decode()
             assert "Tahoma" in xml and "Calibri" not in xml, (n, "police du graphique")
 
+    # 11) Onglets larges imprimables : paysage, ajusté en largeur seule (hauteur libre),
+    #     sans toucher aux largeurs de colonnes.
+    for nom in ("Guide", "Bilan", "Régularisation charges", "Révision IRL", "Tableau de bord"):
+        wsl = wd9[nom]
+        assert wsl.page_setup.orientation == "landscape", (nom, wsl.page_setup.orientation)
+        assert wsl.page_setup.fitToWidth == 1 and wsl.page_setup.fitToHeight == 0, nom
+        assert wsl.sheet_properties.pageSetUpPr and wsl.sheet_properties.pageSetUpPr.fitToPage, nom
+
     print("SMOKE OK")
     return 0
 

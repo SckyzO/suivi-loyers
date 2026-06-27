@@ -714,21 +714,29 @@ def ajuster_colonnes(wb: Workbook, police: str) -> None:
                 dim.width = round(dim.width * facteur, 1)
 
 
-def mettre_en_page_impression(ws, derniere_cellule: str, *, paysage: bool = False) -> None:
-    """Prépare une feuille à l'impression : zone d'impression bornée, A4, contenu
-    ajusté à une seule page et centré horizontalement, marges sobres. Le quadrillage
-    est déjà masqué par construire_*. Point unique de mise en page d'impression.
+def mettre_en_page_impression(ws, zone: str | None = None, *, paysage: bool = False,
+                              hauteur_pages: int = 1, centre: bool = True) -> None:
+    """Prépare une feuille à l'impression : A4, ajusté à la page, marges sobres.
+
+    - `zone` : plage d'impression (ex. « A1:E29 »). None = laisser le tableur déterminer
+      la zone (utile pour les feuilles à graphiques, hors plage de cellules).
+    - `hauteur_pages` : 1 = tout sur une page ; 0 = ajuste en largeur seulement et laisse
+      déborder en hauteur sur plusieurs pages (feuilles larges, texte lisible).
+    - N'altère PAS les largeurs de colonnes : fitToPage est un zoom appliqué à l'impression.
+
+    fitToWidth/Height ne s'appliquent que si fitToPage est activé (piège openpyxl).
+    Le quadrillage est déjà masqué par construire_*.
     """
-    ws.print_area = f"A1:{derniere_cellule}"
+    if zone:
+        ws.print_area = zone
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE if paysage else ws.ORIENTATION_PORTRAIT
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    # fitToWidth/Height ne s'appliquent que si fitToPage est activé (piège openpyxl).
+    ws.page_setup.fitToHeight = hauteur_pages
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     ws.page_margins = PageMargins(left=0.7, right=0.7, top=0.9, bottom=0.8,
                                   header=0.3, footer=0.3)
-    ws.print_options.horizontalCentered = True
+    ws.print_options.horizontalCentered = centre
 
 
 # --------------------------------------------------------------------------- #
@@ -1468,7 +1476,7 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     ws.cell(r_sign + 2, 2, "Signature du bailleur :").font = Font(bold=True)
 
     # Document destiné à l'impression : une page A4 portrait, centrée.
-    mettre_en_page_impression(ws, f"E{r_sign + 2}")
+    mettre_en_page_impression(ws, f"A1:E{r_sign + 2}")
 
 
 def construire_documents(wb: Workbook, cfg: dict, ref_loc: dict) -> None:
@@ -1815,6 +1823,19 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     # Tableau de bord en 2e position, juste après le Guide (visible dès l'ouverture).
     if "Tableau de bord" in wb.sheetnames:
         wb.move_sheet("Tableau de bord", offset=1 - wb.sheetnames.index("Tableau de bord"))
+
+    # Impression des onglets larges : paysage, ajusté en largeur (hauteur libre), pour
+    # rester lisible sans modifier les largeurs de colonnes. Les documents gardent leur
+    # mise en page portrait une page (posée dans construire_document).
+    for nom in ("Guide", "Bilan", "Régularisation charges", "Révision IRL"):
+        if nom in wb.sheetnames:
+            ws = wb[nom]
+            mettre_en_page_impression(ws, ws.dimensions, paysage=True,
+                                      hauteur_pages=0, centre=False)
+    if "Tableau de bord" in wb.sheetnames:
+        # Graphiques hors plage de cellules : pas de zone explicite, le tableur les inclut.
+        mettre_en_page_impression(wb["Tableau de bord"], None, paysage=True,
+                                  hauteur_pages=0, centre=False)
 
     # Police d'identité, en dernière passe (couvre aussi les cellules sans style explicite),
     # puis compensation de largeur des colonnes pour les polices plus larges que Calibri.
