@@ -101,24 +101,57 @@ class ChampDate:
         self.frame.grid(**kw)
 
     def _ouvrir(self) -> None:
-        top = tk.Toplevel(self.frame)
-        top.title("Choisir une date")
-        top.transient(self.frame.winfo_toplevel())
-        top.grab_set()
+        # Calendrier en popup déroulant ancré SOUS le champ (pas une fenêtre séparée).
+        # Sélection en un clic ; ferme au clic ailleurs ou sur Échap. Couleurs clair/sombre.
+        dark = HAS_SVTTK and sv_ttk.get_theme() == "dark"
+        if dark:
+            couleurs = dict(background="#2b2b2b", foreground="#f0f0f0",
+                            headersbackground="#333333", headersforeground="#f0f0f0",
+                            normalbackground="#2b2b2b", normalforeground="#f0f0f0",
+                            weekendbackground="#313131", weekendforeground="#f0f0f0",
+                            othermonthbackground="#262626", othermonthwebackground="#262626",
+                            selectbackground="#4cc2ff", selectforeground="#06243a",
+                            bordercolor="#454545")
+        else:
+            couleurs = dict(background="#ffffff", foreground="#1a1a1a",
+                            headersbackground="#f0f0f0", headersforeground="#1a1a1a",
+                            normalbackground="#ffffff", normalforeground="#1a1a1a",
+                            weekendbackground="#fafafa", weekendforeground="#1a1a1a",
+                            othermonthbackground="#f5f5f5", othermonthwebackground="#f5f5f5",
+                            selectbackground="#0067c0", selectforeground="#ffffff",
+                            bordercolor="#d9d9d9")
         try:
             d = dt.date.fromisoformat(self.var.get().strip())
         except ValueError:
             d = dt.date.today()
-        cal = Calendar(top, selectmode="day", year=d.year, month=d.month, day=d.day,
-                       date_pattern="yyyy-mm-dd")
-        cal.pack(padx=8, pady=8)
 
-        def valider():
+        pop = tk.Toplevel(self.frame)
+        pop.overrideredirect(True)                       # sans bordure ni barre de titre
+        pop.transient(self.frame.winfo_toplevel())
+        self.entry.update_idletasks()
+        x = self.entry.winfo_rootx()
+        y = self.entry.winfo_rooty() + self.entry.winfo_height() + 2
+        pop.geometry(f"+{x}+{y}")
+        cal = Calendar(pop, selectmode="day", year=d.year, month=d.month, day=d.day,
+                       date_pattern="yyyy-mm-dd", showweeknumbers=False,
+                       firstweekday="monday", **couleurs)
+        cal.pack()
+
+        def choisir(_e=None):
             self.var.set(cal.get_date())
-            top.destroy()
+            pop.destroy()
 
-        ttk.Button(top, text="Valider", command=valider).pack(pady=(0, 8))
-        self.entry.focus_set()
+        def fermer_si_dehors(e):
+            dans = (pop.winfo_rootx() <= e.x_root <= pop.winfo_rootx() + pop.winfo_width()
+                    and pop.winfo_rooty() <= e.y_root <= pop.winfo_rooty() + pop.winfo_height())
+            if not dans:
+                pop.destroy()
+
+        cal.bind("<<CalendarSelected>>", choisir)
+        pop.bind("<Escape>", lambda e: pop.destroy())
+        pop.bind("<Button-1>", fermer_si_dehors, add="+")
+        pop.grab_set()
+        cal.focus_set()
 
     def get(self) -> str:
         txt = self.var.get().strip()
@@ -162,6 +195,8 @@ class DialogueLocataire(tk.Toplevel):
         self._vars: dict[str, tk.StringVar] = {}
         self._champs_num: set[str] = set()
         self._depot = depot
+        dark = HAS_SVTTK and sv_ttk.get_theme() == "dark"
+        muted = "#AAAAAA" if dark else "#666666"
         ligne = 0
 
         # Champs alignés : label en colonne 0, champ étiré en colonne 1 (sticky ew) pour
@@ -192,12 +227,21 @@ class DialogueLocataire(tk.Toplevel):
             ligne += 1
             return cb
 
+        def section(texte: str) -> None:
+            nonlocal ligne
+            ttk.Label(self, text=texte, font=("Segoe UI", 9, "bold"), foreground=muted).grid(
+                row=ligne, column=0, columnspan=2, sticky="w", padx=10, pady=(12, 2))
+            ligne += 1
+
+        section("Identité")
         libelle("Nom *"); entree("nom")
         libelle("Prénom"); entree("prenom")
+        section("Logement")
         libelle("Type de bien"); combo("type_bien", TYPES_BIEN, readonly=True,
                                        defaut=v.get("type_bien", TYPES_BIEN[0]))
         libelle("N° appart. / Nom du bien"); entree("identifiant")
         libelle("Adresse du logement"); combo("adresse", adresses)
+        section("Loyer & charges")
         if split:
             libelle("Loyer nu (€)"); entree("loyer_nu", num=True)
             libelle("Charges (€)"); entree("charges", num=True)
@@ -208,6 +252,7 @@ class DialogueLocataire(tk.Toplevel):
         if depot:
             libelle("Dépôt de garantie (€)"); entree("depot_garantie", num=True)
 
+        section("Bail")
         libelle("Date d'entrée")
         self.date_entree = ChampDate(self, v.get("date_entree", ""))
         self.date_entree.grid(row=ligne, column=1, sticky="w", padx=(0, 10), pady=3)
@@ -236,14 +281,15 @@ class DialogueLocataire(tk.Toplevel):
         self.cb_observation = combo("observation", OBSERVATIONS, defaut=v.get("observation", ""))
 
         ttk.Label(self, text="Adresse : choisissez-en une déjà saisie ou tapez-en une nouvelle.",
-                  foreground="#666", wraplength=320, justify="left").grid(
-            row=ligne, column=0, columnspan=2, padx=8, pady=(4, 6), sticky="w")
+                  foreground=muted, wraplength=360, justify="left").grid(
+            row=ligne, column=0, columnspan=2, padx=10, pady=(10, 4), sticky="w")
         ligne += 1
 
         barre = ttk.Frame(self)
-        barre.grid(row=ligne, column=0, columnspan=2, pady=8)
-        ttk.Button(barre, text="Valider", command=self._valider).pack(side="left", padx=6)
-        ttk.Button(barre, text="Annuler", command=self.destroy).pack(side="left", padx=6)
+        barre.grid(row=ligne, column=0, columnspan=2, sticky="e", padx=10, pady=(6, 12))
+        ttk.Button(barre, text="Valider", command=self._valider,
+                   style="Accent.TButton").pack(side="left", padx=6)
+        ttk.Button(barre, text="Annuler", command=self.destroy).pack(side="left")
 
         self._maj_sortie()
 
