@@ -270,23 +270,23 @@ def main() -> int:
             break
     assert val == 612, f"charge réelle non préservée: {val}"
 
-    # 5b) IRL : saisie d'un indice et d'un choix de révision, préservés après régénération.
+    # 5b) IRL : indice saisi préservé après régénération ; table « Loyer applicable par année »
+    #     entièrement recalculée (plus de saisie de révision à préserver).
     wb = load_workbook(f1)
     irl = wb["Révision IRL"]
-    # 1er indice (ligne 5, colonne C) et 1re révision locataire.
-    irl.cell(5, 3).value = 145.17                      # valeur IRL T1 année début
-    h_rev = next(r for r in range(1, irl.max_row + 1)
-                 if irl.cell(r, 7).value == "Nouveau loyer (€)")
-    irl.cell(h_rev + 1, 3).value = "T2"                # trimestre réf. 1er locataire
-    nom_irl = irl.cell(h_rev + 1, 1).value
+    irl.cell(5, 3).value = 145.17                       # valeur IRL T1 année début (saisie)
     wb.save(f1)
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True)
-    irl = load_workbook(f1)["Révision IRL"]
+    wb = load_workbook(f1)
+    irl = wb["Révision IRL"]
     assert irl.cell(5, 3).value == 145.17, irl.cell(5, 3).value
-    h_rev = next(r for r in range(1, irl.max_row + 1)
-                 if irl.cell(r, 7).value == "Nouveau loyer (€)")
-    assert irl.cell(h_rev + 1, 1).value == nom_irl
-    assert irl.cell(h_rev + 1, 3).value == "T2", irl.cell(h_rev + 1, 3).value
+    # Section 2 recalculée : en-tête + plages nommées qui alimentent le suivi.
+    h_loy = next(r for r in range(1, irl.max_row + 1)
+                 if irl.cell(r, 5).value == "Loyer applicable (€)")
+    appfx = irl.cell(h_loy + 1, 5).value
+    assert "IFERROR" in appfx and "SUMIFS(Irl_Valeur" in appfx, appfx
+    for nom_plage in ("LoyerAn_Loc", "LoyerAn_Annee", "LoyerAn_Valeur"):
+        assert nom_plage in wb.defined_names, (nom_plage, list(wb.defined_names))
 
     # 6) Rétro-compatibilité : une « ancienne » config (champ bien, module quittances)
     #    se migre et génère sans erreur.
@@ -416,6 +416,43 @@ def main() -> int:
     rann = next((r for r in range(1, locsheet.max_row + 1)
                  if str(locsheet.cell(r, 3).value or "").startswith("Total ")), None)
     assert rann and _f6(locsheet.cell(rann, 3)) == calc6, ("Total année locataire non surligné", rann)
+
+    # 13) Phase C — révision IRL répercutée mois par mois (loyer applicable par année).
+    #     IRL activé : le loyer attendu du suivi lit la table LoyerAn ; IRL désactivé : il
+    #     pointe directement la fiche Locataires (garde-fou de non-régression).
+    cfg_irl = {
+        "bailleur": {"nom": "IRL Multi"},
+        "periode": {"annee_debut": 2024, "annee_fin": 2025},
+        "modules": {"mode_charges": "separees", "caf": False, "depot_garantie": False,
+                    "documents": False, "tableau_bord": False, "irl": True},
+        "locataires": [{"nom": "Long", "identifiant": "L1", "adresse": "x rue",
+                        "loyer_nu": 600, "charges": 50, "date_entree": "2024-03-15"}],
+    }
+    f13 = tmp / "irl_multi.xlsx"
+    g.generer_workbook(g.valider_config(cfg_irl), f13, preserver=False)
+    w13 = load_workbook(f13)
+    sl = w13["L1 - Long"]
+    rl, el = ligne_entete(sl)
+    col_loy = el["Loyer nu dû"]
+    # Une ligne 2025 du suivi doit lire le loyer applicable via la table LoyerAn.
+    r2025 = next(r for r in range(rl + 1, sl.max_row + 1)
+                 if sl.cell(r, el["Année"]).value == 2025 and sl.cell(r, el["Mois"]).value in g.MOIS)
+    floy = sl.cell(r2025, col_loy).value
+    assert isinstance(floy, str) and floy.startswith("=SUMIFS(LoyerAn_Valeur"), floy
+    # La table IRL ancre la revalorisation sur la 1re année active (A0 = 2024).
+    irl13 = w13["Révision IRL"]
+    h_loy = next(r for r in range(1, irl13.max_row + 1)
+                 if irl13.cell(r, 5).value == "Loyer applicable (€)")
+    app2025 = next(irl13.cell(r, 5).value for r in range(h_loy + 1, irl13.max_row + 1)
+                   if irl13.cell(r, 2).value == 2025)
+    assert ",2024," in app2025, app2025
+
+    # Garde-fou : sans le module IRL, le loyer attendu reste un renvoi direct à Locataires.
+    wmin = load_workbook(f2)["Maison - Carl"]
+    rm, em = ligne_entete(wmin)
+    rrow = next(r for r in range(rm + 1, wmin.max_row + 1) if wmin.cell(r, em["Mois"]).value in g.MOIS)
+    fmin = wmin.cell(rrow, em["Loyer dû"]).value
+    assert isinstance(fmin, str) and fmin.startswith("='Locataires'!"), fmin
 
     print("SMOKE OK")
     return 0

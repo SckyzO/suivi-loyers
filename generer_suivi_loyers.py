@@ -484,6 +484,17 @@ def _prorata_facteur(loc: dict, annee: int, mois: int) -> float:
     return max(0, dernier - premier + 1) / nb
 
 
+def _trimestre_de(d) -> str:
+    """Trimestre civil (« T1 ».. « T4 ») d'une date ; « T1 » par défaut si absente."""
+    date = _date(d)
+    return f"T{(date.month - 1) // 3 + 1}" if date else "T1"
+
+
+def _annees_actives(loc: dict, annee_debut: int, annee_fin: int) -> list[int]:
+    """Années pendant lesquelles le locataire est présent (au moins un mois actif)."""
+    return sorted({a for (a, _m) in _mois_actifs(loc, annee_debut, annee_fin)})
+
+
 # Mois <= ce repère : paiement de démonstration saisi ; après : laissé vide (« À encaisser »).
 # Fixe (pas la date du jour) pour que les classeurs d'exemple soient reproductibles.
 DEMO_CUTOFF = (2026, 3)
@@ -914,6 +925,7 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
     mod = cfg["modules"]
     split, charges_sep, mode = _flags_charges(cfg)
     caf = mod["caf"]
+    irl_on = bool(mod.get("irl"))
     lettre_loc = ref_loc["lettre"]
     cols = _colonnes_locataire(split, charges_sep, mode, caf)
     L = {c["key"]: get_column_letter(i) for i, c in enumerate(cols, 1)}
@@ -979,7 +991,13 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                     elif c["kind"] == "ref":
                         # Prorata appliqué au loyer / charges (pas à la CAF, qui se calcule à part).
                         sf = sfx if c["src"] in ("loyer_nu", "charges", "loyer_total") else ""
-                        cell.value = refloc(c["src"]) + sf
+                        if irl_on and c["src"] in ("loyer_nu", "loyer_total"):
+                            # IRL activé : le loyer attendu suit le loyer applicable de l'année
+                            # (table « Loyer applicable par année » de l'onglet Révision IRL).
+                            cell.value = (f"=SUMIFS(LoyerAn_Valeur,LoyerAn_Loc,${L['locataire']}{r},"
+                                          f"LoyerAn_Annee,${L['annee']}{r}){sf}")
+                        else:
+                            cell.value = refloc(c["src"]) + sf
                     elif key == "total_du" and split:
                         cell.value = f"={L['loyer_nu_du']}{r}+{L['charges_du']}{r}"
                     elif key == "rac_attendu":
@@ -1172,8 +1190,7 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
     ws = wb.create_sheet("Révision IRL")
     ws.sheet_view.showGridLines = False
     ws.sheet_properties.tabColor = CHARTE.onglet_systeme
-    for col, w in (("A", 24), ("B", 16), ("C", 16), ("D", 16), ("E", 14), ("F", 14),
-                   ("G", 16), ("H", 14), ("I", 12)):
+    for col, w in (("A", 24), ("B", 12), ("C", 14), ("D", 16), ("E", 18), ("F", 16)):
         ws.column_dimensions[col].width = w
 
     style_titre(ws.cell(1, 1, "RÉVISION DU LOYER (IRL)"))
@@ -1184,6 +1201,8 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
     for i, t in enumerate(("Année", "Trimestre", "Valeur IRL"), 1):
         style_entete(ws.cell(4, i, t))
     regler_hauteur_entete(ws, 4)
+    ws.cell(3, 4, "Saisissez ici les indices ; le loyer révisé de chaque année est "
+            "calculé ci-dessous et répercuté dans le suivi mensuel.").font = Font(italic=True)
 
     idx_saisis = saisies_irl.get("indices", {})
     r = 5
@@ -1205,57 +1224,57 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
     wb.defined_names.add(DefinedName("Irl_Trim", attr_text=f"{sh}!$B$5:$B${fin_idx}"))
     wb.defined_names.add(DefinedName("Irl_Valeur", attr_text=f"{sh}!$C$5:$C${fin_idx}"))
 
-    # --- Section 2 : calcul de révision par locataire ---
+    # --- Section 2 : loyer applicable par année (révision IRL répercutée) ---
+    # Modèle fermé : loyer(année Y) = loyer_base × IRL_Tref(Y) / IRL_Tref(A0), où A0 est la
+    # première année de présence (loyer de base = fiche Locataires) et Tref le trimestre de
+    # référence dérivé de la date d'entrée. Indices absents → IFERROR retombe sur le loyer de
+    # base (aucune révision). Ces valeurs alimentent le suivi mensuel via les plages LoyerAn_*.
     rs = fin_idx + 3
-    style_titre(ws.cell(rs - 1, 1, "Calcul de révision par locataire"), TITRE_H2)
-    entetes = ["Locataire", "Loyer actuel (€)", "Trimestre réf.", "Année révision",
-               "IRL année N", "IRL année N-1", "Nouveau loyer (€)", "Variation (€)",
-               "Variation (%)"]
+    style_titre(ws.cell(rs - 1, 1, "Loyer applicable par année (révision répercutée)"), TITRE_H2)
+    entetes = ["Locataire", "Année", "Trimestre réf.", "Loyer de base (€)",
+               "Loyer applicable (€)", "Variation vs base"]
     for i, t in enumerate(entetes, 1):
         style_entete(ws.cell(rs, i, t))
     regler_hauteur_entete(ws, rs)
 
-    rev = saisies_irl.get("revisions", {})
-    annee_def = annees[1] if len(annees) > 1 else annees[0]
     r = rs + 1
     for loc_index, loc in enumerate(cfg["locataires"]):
         nom = _identite(loc)
         rloc = loc_index + 2
-        pre = rev.get(str(nom), {})
-        ecrire_texte(ws, r, 1, nom).border = BORDURE
-        cact = ws.cell(r, 2, "=" + _ref("Locataires", f"${lettre_loc[loyer_field]}${rloc}"))
-        cact.number_format = FMT_EURO
-        cact.border = BORDURE
-        ctr = ws.cell(r, 3, pre.get("trimestre", "T1"))
-        style_cellule(ctr, saisie=True)
-        can = ws.cell(r, 4, pre.get("annee", annee_def))
-        can.number_format = "0"
-        style_cellule(can, saisie=True)
-        cN = ws.cell(r, 5, f"=SUMIFS(Irl_Valeur,Irl_Annee,$D{r},Irl_Trim,$C{r})")
-        cN.number_format = "0.00"
-        cN.border = BORDURE
-        cN1 = ws.cell(r, 6, f"=SUMIFS(Irl_Valeur,Irl_Annee,$D{r}-1,Irl_Trim,$C{r})")
-        cN1.number_format = "0.00"
-        cN1.border = BORDURE
-        cnew = ws.cell(r, 7, f'=IFERROR($B{r}*E{r}/F{r},"")')
-        cnew.number_format = FMT_EURO
-        cnew.border = BORDURE
-        cvar = ws.cell(r, 8, f'=IFERROR(G{r}-$B{r},"")')
-        cvar.number_format = FMT_EURO
-        cvar.border = BORDURE
-        cpct = ws.cell(r, 9, f'=IFERROR(G{r}/$B{r}-1,"")')
-        cpct.number_format = FMT_PCT
-        cpct.border = BORDURE
-        r += 1
-    fin_rev = r - 1
+        base_ref = _ref("Locataires", f"${lettre_loc[loyer_field]}${rloc}")
+        annees_loc = _annees_actives(loc, cfg["annee_debut"], cfg["annee_fin"])
+        if not annees_loc:
+            continue
+        a0 = annees_loc[0]                       # année de référence (loyer de base)
+        trim = _trimestre_de(loc.get("date_entree"))
+        for annee in annees_loc:
+            ecrire_texte(ws, r, 1, nom).border = BORDURE
+            ca = ws.cell(r, 2, annee)
+            ca.number_format = "0"
+            ca.border = BORDURE
+            ws.cell(r, 3, trim).border = BORDURE
+            cb = ws.cell(r, 4, "=" + base_ref)
+            cb.number_format = FMT_EURO
+            cb.border = BORDURE
+            capp = ws.cell(r, 5, f'=IFERROR($D{r}*SUMIFS(Irl_Valeur,Irl_Annee,$B{r},'
+                                 f'Irl_Trim,$C{r})/SUMIFS(Irl_Valeur,Irl_Annee,{a0},'
+                                 f'Irl_Trim,$C{r}),$D{r})')
+            capp.number_format = FMT_EURO
+            capp.border = BORDURE
+            cvar = ws.cell(r, 6, f'=IFERROR($E{r}/$D{r}-1,"")')
+            cvar.number_format = FMT_PCT
+            cvar.border = BORDURE
+            r += 1
+    fin_loy = r - 1
 
-    if fin_rev >= rs + 1:
-        dvt = DataValidation(type="list", formula1=_formule_liste(TRIMESTRES), allow_blank=True)
-        dvt.add(f"C{rs + 1}:C{fin_rev}")
-        ws.add_data_validation(dvt)
-        dva = DataValidation(type="list", formula1=_formule_liste(annees), allow_blank=True)
-        dva.add(f"D{rs + 1}:D{fin_rev}")
-        ws.add_data_validation(dva)
+    if fin_loy >= rs + 1:
+        sh2 = "'Révision IRL'"
+        wb.defined_names.add(DefinedName(
+            "LoyerAn_Loc", attr_text=f"{sh2}!$A${rs + 1}:$A${fin_loy}"))
+        wb.defined_names.add(DefinedName(
+            "LoyerAn_Annee", attr_text=f"{sh2}!$B${rs + 1}:$B${fin_loy}"))
+        wb.defined_names.add(DefinedName(
+            "LoyerAn_Valeur", attr_text=f"{sh2}!$E${rs + 1}:$E${fin_loy}"))
     ws.freeze_panes = "A5"
 
 
@@ -1640,8 +1659,9 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
                       "annuelles (pré-remplies en mode charges comprises) ; le solde par "
                       "locataire se calcule seul.")
     if cfg["modules"].get("irl"):
-        etapes.append("Onglet « Révision IRL » : saisissez les indices IRL publiés ; le nouveau "
-                      "loyer après révision se calcule seul (lien officiel ci-dessous).")
+        etapes.append("Onglet « Révision IRL » : saisissez les indices IRL publiés ; le loyer "
+                      "révisé de chaque année est calculé et répercuté automatiquement dans le "
+                      "loyer attendu du suivi mensuel (lien officiel ci-dessous).")
     for i, texte in enumerate(etapes, 1):
         pastille(r, str(i), CHARTE.onglet_systeme, texte, texte_blanc=True)
         ws.row_dimensions[r].height = 30
@@ -1745,19 +1765,22 @@ def recolter_regularisation(wb) -> dict:
 
 
 def recolter_irl(wb) -> dict:
-    """Saisies IRL d'un classeur déjà chargé : indices et choix de révision par locataire."""
+    """Indices IRL déjà saisis : {"indices": {(année, trimestre): valeur}}.
+
+    Seuls les indices sont saisis ; la table « Loyer applicable par année » est entièrement
+    recalculée à la régénération, donc rien d'autre à préserver.
+    """
     if "Révision IRL" not in wb.sheetnames:
         return {}
     ws = wb["Révision IRL"]
-    res: dict = {"indices": {}, "revisions": {}}
+    res: dict = {"indices": {}}
 
-    h_idx = h_rev = None
+    h_idx = None
     for r in range(1, ws.max_row + 1):
-        ligne = [ws.cell(r, c).value for c in range(1, 10)]
+        ligne = [ws.cell(r, c).value for c in range(1, 7)]
         if "Valeur IRL" in ligne:
             h_idx = r
-        if "Nouveau loyer (€)" in ligne:
-            h_rev = r
+            break
 
     if h_idx:
         r = h_idx + 1
@@ -1768,20 +1791,6 @@ def recolter_irl(wb) -> dict:
             if v not in (None, ""):
                 res["indices"][(int(an), str(tr))] = v
             r += 1
-
-    if h_rev:
-        for r in range(h_rev + 1, ws.max_row + 1):
-            nom = ws.cell(r, 1).value
-            if not nom:
-                continue
-            tr, an = ws.cell(r, 3).value, ws.cell(r, 4).value
-            d = {}
-            if tr not in (None, ""):
-                d["trimestre"] = str(tr)
-            if an not in (None, ""):
-                d["annee"] = int(an)
-            if d:
-                res["revisions"][str(nom)] = d
     return res
 
 

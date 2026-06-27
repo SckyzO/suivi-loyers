@@ -123,6 +123,12 @@ locataire + pré-remplissage = provisions en mode comprises) et `irl` (`construi
 saisies propres à ces onglets sont préservées par `recolter_regularisation` et `recolter_irl`,
 en plus de `recolter_saisies` (mensuel).
 
-Limite assumée IRL : c'est un **calculateur d'aide**. Le loyer attendu du suivi suit la fiche
-locataire courante ; l'intégration loyer-par-année (révision répercutée mois par mois) reste à
-faire dans la passe design Excel.
+- **IRL répercutée mois par mois** (`construire_irl`, Section 2 « Loyer applicable par année ») :
+  modèle fermé `loyer(Y) = loyer_base × IRL_Tref(Y) / IRL_Tref(A0)`, où `A0` = 1ʳᵉ année active du
+  locataire (loyer de base = fiche Locataires, colonne `loyer_nu`/`loyer_total`), `Tref` = trimestre
+  dérivé de la date d'entrée (`_trimestre_de`). Indices absents → `IFERROR` retombe sur le loyer de
+  base (aucune révision). La table est entièrement recalculée (aucune saisie de révision à préserver ;
+  `recolter_irl` ne préserve que les indices). Elle est exposée en plages nommées `LoyerAn_Loc/Annee/
+  Valeur` ; quand `modules.irl` est actif, le loyer attendu de chaque feuille locataire lit ces plages
+  par `SUMIFS` (au lieu du renvoi direct à `Locataires`). **Seul le loyer est révisé**, pas les charges
+  ni la CAF. Module IRL off (défaut) → renvoi direct inchangé (non-régression).
