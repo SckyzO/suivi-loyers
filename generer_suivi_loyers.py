@@ -47,6 +47,8 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.workbook.defined_name import DefinedName
+from openpyxl.worksheet.page import PageMargins
+from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.chart import BarChart, Reference
 
 # --------------------------------------------------------------------------- #
@@ -678,6 +680,23 @@ def ajuster_colonnes(wb: Workbook, police: str) -> None:
         for dim in ws.column_dimensions.values():
             if dim.width:
                 dim.width = round(dim.width * facteur, 1)
+
+
+def mettre_en_page_impression(ws, derniere_cellule: str, *, paysage: bool = False) -> None:
+    """Prépare une feuille à l'impression : zone d'impression bornée, A4, contenu
+    ajusté à une seule page et centré horizontalement, marges sobres. Le quadrillage
+    est déjà masqué par construire_*. Point unique de mise en page d'impression.
+    """
+    ws.print_area = f"A1:{derniere_cellule}"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE if paysage else ws.ORIENTATION_PORTRAIT
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    # fitToWidth/Height ne s'appliquent que si fitToPage est activé (piège openpyxl).
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_margins = PageMargins(left=0.7, right=0.7, top=0.9, bottom=0.8,
+                                  header=0.3, footer=0.3)
+    ws.print_options.horizontalCentered = True
 
 
 # --------------------------------------------------------------------------- #
@@ -1397,6 +1416,9 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     r_sign = r_note + 2
     ws.cell(r_sign, 2, "Fait à ……………………………, le ……………………………")
     ws.cell(r_sign + 2, 2, "Signature du bailleur :").font = Font(bold=True)
+
+    # Document destiné à l'impression : une page A4 portrait, centrée.
+    mettre_en_page_impression(ws, f"E{r_sign + 2}")
 
 
 def construire_documents(wb: Workbook, cfg: dict, ref_loc: dict) -> None:

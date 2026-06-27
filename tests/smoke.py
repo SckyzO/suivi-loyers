@@ -362,6 +362,18 @@ def main() -> int:
     assert wc and wt and wt > wc, (wc, wt)
     assert abs(wt / wc - g.FACTEUR_LARGEUR["Tahoma"]) < 0.02, (wc, wt, wt / wc)
 
+    # 9) Documents imprimables : zone d'impression bornée, A4 portrait ajusté à 1 page, centré.
+    wd9 = load_workbook(f1)
+    for nom in ("Quittance", "Avis d'échéance", "Lettre de relance"):
+        wsd = wd9[nom]
+        pa = wsd.print_area
+        pa_txt = pa if isinstance(pa, str) else ",".join(pa or [])
+        assert "$A$1:" in pa_txt, (nom, pa)
+        assert wsd.page_setup.orientation == "portrait", (nom, wsd.page_setup.orientation)
+        assert wsd.page_setup.fitToWidth == 1 and wsd.page_setup.fitToHeight == 1, nom
+        assert wsd.sheet_properties.pageSetUpPr and wsd.sheet_properties.pageSetUpPr.fitToPage, nom
+        assert wsd.print_options.horizontalCentered, nom
+
     print("SMOKE OK")
     return 0
 
