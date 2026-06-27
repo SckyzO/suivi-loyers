@@ -84,18 +84,40 @@ def _parse_nombre(txt: str) -> float:
 # --------------------------------------------------------------------------- #
 
 class ChampDate:
-    """Saisie de date : zone texte AAAA-MM-JJ (toujours tapable au clavier) + bouton 📅."""
+    """Saisie de date : champ texte (placeholder « AAAA-MM-JJ », tapable au clavier) + 📅."""
+
+    _PH = "AAAA-MM-JJ"
 
     def __init__(self, parent, iso: str = ""):
         self.frame = ttk.Frame(parent)
-        self.var = tk.StringVar(value=iso or "")
-        self.entry = ttk.Entry(self.frame, textvariable=self.var, width=12)
-        self.entry.pack(side="left")
-        ttk.Label(self.frame, text="AAAA-MM-JJ", foreground="#888").pack(side="left", padx=(4, 0))
+        self.var = tk.StringVar()
+        self.entry = ttk.Entry(self.frame, textvariable=self.var)
+        self.entry.pack(side="left", fill="x", expand=True)
         self.bouton = None
         if HAS_CAL:
-            self.bouton = ttk.Button(self.frame, text="📅", width=3, command=self._ouvrir)
-            self.bouton.pack(side="left", padx=(4, 0))
+            self.bouton = ttk.Button(self.frame, text="📅", width=3,
+                                     command=self._ouvrir, takefocus=False)
+            self.bouton.pack(side="left", padx=(5, 0))
+        # Couleur de texte normale (selon thème) vs placeholder grisé.
+        dark = HAS_SVTTK and sv_ttk.get_theme() == "dark"
+        self._fg = ttk.Style().lookup("TEntry", "foreground") or ("#f0f0f0" if dark else "#000000")
+        self._ph_fg = "#8a8a8a"
+        self._ph_on = False
+        self.entry.bind("<FocusIn>", self._ph_hide)
+        self.entry.bind("<FocusOut>", self._ph_show)
+        self.set(iso or "")
+
+    def _ph_show(self, _e=None) -> None:
+        if not self.var.get().strip():
+            self._ph_on = True
+            self.entry.configure(foreground=self._ph_fg)
+            self.var.set(self._PH)
+
+    def _ph_hide(self, _e=None) -> None:
+        if self._ph_on:
+            self._ph_on = False
+            self.var.set("")
+            self.entry.configure(foreground=self._fg)
 
     def grid(self, **kw):
         self.frame.grid(**kw)
@@ -120,47 +142,67 @@ class ChampDate:
                             othermonthbackground="#f5f5f5", othermonthwebackground="#f5f5f5",
                             selectbackground="#0067c0", selectforeground="#ffffff",
                             bordercolor="#d9d9d9")
+        val = "" if self._ph_on else self.var.get().strip()
         try:
-            d = dt.date.fromisoformat(self.var.get().strip())
+            d = dt.date.fromisoformat(val)
         except ValueError:
             d = dt.date.today()
 
+        racine = self.frame.winfo_toplevel()             # dialogue modal parent
         pop = tk.Toplevel(self.frame)
-        pop.overrideredirect(True)                       # sans bordure ni barre de titre
-        pop.transient(self.frame.winfo_toplevel())
+        pop.wm_overrideredirect(True)                    # sans bordure ni barre de titre
         self.entry.update_idletasks()
         x = self.entry.winfo_rootx()
         y = self.entry.winfo_rooty() + self.entry.winfo_height() + 2
-        pop.geometry(f"+{x}+{y}")
+        pop.wm_geometry(f"+{x}+{y}")
         cal = Calendar(pop, selectmode="day", year=d.year, month=d.month, day=d.day,
                        date_pattern="yyyy-mm-dd", showweeknumbers=False,
                        firstweekday="monday", **couleurs)
         cal.pack()
+        # Remonter au-dessus du dialogue modal et prendre la main (sinon invisible/inerte).
+        pop.update_idletasks()
+        pop.lift()
+        pop.attributes("-topmost", True)
+
+        def fermer():
+            try:
+                pop.grab_release()
+            except Exception:  # noqa: BLE001
+                pass
+            pop.destroy()
+            try:
+                racine.grab_set()                        # rend la modalité au dialogue
+            except Exception:  # noqa: BLE001
+                pass
 
         def choisir(_e=None):
-            self.var.set(cal.get_date())
-            pop.destroy()
+            self.set(cal.get_date())
+            fermer()
 
-        def fermer_si_dehors(e):
+        def dehors(e):
             dans = (pop.winfo_rootx() <= e.x_root <= pop.winfo_rootx() + pop.winfo_width()
                     and pop.winfo_rooty() <= e.y_root <= pop.winfo_rooty() + pop.winfo_height())
             if not dans:
-                pop.destroy()
+                fermer()
 
         cal.bind("<<CalendarSelected>>", choisir)
-        pop.bind("<Escape>", lambda e: pop.destroy())
-        pop.bind("<Button-1>", fermer_si_dehors, add="+")
+        pop.bind("<Escape>", lambda e: fermer())
+        pop.bind("<Button-1>", dehors, add="+")
         pop.grab_set()
         cal.focus_set()
 
     def get(self) -> str:
-        txt = self.var.get().strip()
+        txt = "" if self._ph_on else self.var.get().strip()
         if txt:
             dt.date.fromisoformat(txt)  # lève ValueError si format invalide
         return txt
 
     def set(self, iso: str) -> None:
+        self._ph_on = False
+        self.entry.configure(foreground=self._fg)
         self.var.set(iso or "")
+        if not (iso or "").strip():
+            self._ph_show()
 
     def set_state(self, state: str) -> None:
         for w in (self.entry, self.bouton):
