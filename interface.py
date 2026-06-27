@@ -139,7 +139,12 @@ class DialogueLocataire(tk.Toplevel):
         self._modules = modules
 
         v = valeurs or {}
-        split, caf, depot = modules["loyer_nu_charges"], modules["caf"], modules["depot_garantie"]
+        # Loyer nu + charges saisis séparément dès qu'il y a des charges (modes « comprises »
+        # ET « separees ») ; un seul champ loyer en mode « sans ». Aligné sur _flags_charges.
+        mode = modules.get("mode_charges") or (
+            "separees" if modules.get("loyer_nu_charges", True) else "sans")
+        split = mode in ("comprises", "separees")
+        caf, depot = modules["caf"], modules["depot_garantie"]
         self._vars: dict[str, tk.StringVar] = {}
         self._champs_num: set[str] = set()
         self._depot = depot
