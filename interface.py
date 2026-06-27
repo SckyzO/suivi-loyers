@@ -303,8 +303,8 @@ class DialogueLocataire(tk.Toplevel):
         # Bloc « locataire parti » : active date de sortie + caution + observation.
         self.var_parti = tk.BooleanVar(value=bool(v.get("date_sortie")))
         ttk.Checkbutton(self, text="Le locataire est parti", variable=self.var_parti,
-                        command=self._maj_sortie).grid(row=ligne, column=0, columnspan=2,
-                                                       sticky="w", padx=8, pady=(8, 2))
+                        command=self._maj_sortie, style="Switch.TCheckbutton").grid(
+                            row=ligne, column=0, columnspan=2, sticky="w", padx=8, pady=(8, 2))
         ligne += 1
 
         libelle("Date de sortie")
@@ -314,7 +314,7 @@ class DialogueLocataire(tk.Toplevel):
 
         self.var_caution = tk.BooleanVar(value=bool(v.get("caution_rendue")))
         self.chk_caution = ttk.Checkbutton(self, text="Caution rendue au locataire",
-                                           variable=self.var_caution)
+                                           variable=self.var_caution, style="Switch.TCheckbutton")
         if depot:
             self.chk_caution.grid(row=ligne, column=0, columnspan=2, sticky="w", padx=8, pady=2)
             ligne += 1
@@ -447,7 +447,8 @@ class Application(tk.Tk):
         ttk.Button(af, text="Enregistrer la config…", command=self._enregistrer).pack(side="left", padx=6)
         self.var_save_config = tk.BooleanVar(value=True)
         ttk.Checkbutton(af, text="Enregistrer aussi la configuration",
-                        variable=self.var_save_config).pack(side="left", padx=(16, 0))
+                        variable=self.var_save_config,
+                        style="Switch.TCheckbutton").pack(side="left", padx=(16, 0))
         ttk.Button(af, text="Générer le fichier Excel", command=self._generer,
                    style="Accent.TButton").pack(side="right")
 
@@ -493,8 +494,8 @@ class Application(tk.Tk):
         ligne(bf, 0, "Nom *", ttk.Entry(bf, textvariable=self.var_nom))
         ligne(bf, 1, "Prénom", ttk.Entry(bf, textvariable=self.var_prenom))
         ttk.Checkbutton(bf, text="Le bailleur est une SCI", variable=self.var_sci,
-                        command=self._maj_sci).grid(row=2, column=0, columnspan=2,
-                                                    sticky="w", padx=8, pady=(6, 2))
+                        command=self._maj_sci, style="Switch.TCheckbutton").grid(
+                            row=2, column=0, columnspan=2, sticky="w", padx=8, pady=(6, 2))
         self.ent_sci = ligne(bf, 3, "Nom de la SCI", ttk.Entry(bf, textvariable=self.var_sci_nom))
         ligne(bf, 4, "Adresse", ttk.Entry(bf, textvariable=self.var_adresse))
         ligne(bf, 5, "Téléphone", ttk.Entry(bf, textvariable=self.var_tel))
@@ -514,8 +515,8 @@ class Application(tk.Tk):
                    ("Régularisation annuelle des charges", self.var_regul),
                    ("Révision IRL (loyer revalorisé répercuté)", self.var_irl)]
         for i, (txt, var) in enumerate(options, start=1):
-            ttk.Checkbutton(mf, text=txt, variable=var).grid(
-                row=i, column=0, columnspan=2, sticky="w", padx=8, pady=1)
+            ttk.Checkbutton(mf, text=txt, variable=var, style="Switch.TCheckbutton").grid(
+                row=i, column=0, columnspan=2, sticky="w", padx=8, pady=3)
 
         # -- Période + Apparence du classeur (colonne 2, empilées) --
         col2 = ttk.Frame(reglages)
