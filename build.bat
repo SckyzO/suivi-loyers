@@ -40,6 +40,7 @@ pyinstaller --onefile --windowed --noconfirm --clean ^
   --collect-all tkcalendar ^
   --collect-all babel ^
   --collect-data sv_ttk ^
+  --collect-all darkdetect ^
   --hidden-import babel.numbers ^
   interface.py || goto :erreur
 

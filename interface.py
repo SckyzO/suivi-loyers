@@ -36,6 +36,14 @@ try:
 except Exception:  # noqa: BLE001
     HAS_SVTTK = False
 
+# Détection du mode clair/sombre du système (Windows/macOS/Linux). Optionnel : absent →
+# le mode « Système » retombe sur clair.
+try:
+    import darkdetect
+    HAS_DARKDETECT = True
+except Exception:  # noqa: BLE001
+    HAS_DARKDETECT = False
+
 APP_TITRE = "Suivi des loyers — générateur"
 ANNEE = dt.date.today().year
 TYPES_BIEN = moteur.TYPES_BIEN
@@ -53,6 +61,12 @@ THEME_LABEL = {tid: spec["label"] for tid, spec in moteur.THEMES.items()}
 THEME_KEY = {lbl: tid for tid, lbl in THEME_LABEL.items()}
 # Polices d'origine sur Windows (rendu garanti Excel + LibreOffice). Défaut = moteur.
 POLICES = ["Tahoma", "Calibri", "Arial", "Verdana", "Segoe UI", "Georgia", "Times New Roman"]
+
+# Affichage de la fenêtre (distinct du thème du classeur Excel). « Système » suit le mode
+# clair/sombre de Windows ; n'a d'effet que si sv-ttk est présent.
+WINDOW_THEMES = [("systeme", "Système"), ("clair", "Clair"), ("sombre", "Sombre")]
+WINDOW_KEY = {lbl: k for k, lbl in WINDOW_THEMES}
+WINDOW_LABEL = {k: lbl for k, lbl in WINDOW_THEMES}
 
 
 def _parse_nombre(txt: str) -> float:
@@ -278,23 +292,40 @@ class Application(tk.Tk):
         self.title(APP_TITRE)
         self.minsize(940, 720)  # widgets sv-ttk un peu plus hauts que clam
         self.locataires: list[dict] = []
+        self.var_apparence = tk.StringVar(value=WINDOW_LABEL["systeme"])
         self._init_style()
         self._construire()
 
     def _init_style(self) -> None:
-        style = ttk.Style(self)
-        if HAS_SVTTK:
-            sv_ttk.set_theme("light")          # look Windows 11 (mode clair)
-        else:
+        self._style = ttk.Style(self)
+        if not HAS_SVTTK:
             try:
-                style.theme_use("clam")
+                self._style.theme_use("clam")
             except tk.TclError:
                 pass
-        # Accent de marque dérivé du registre de thèmes (pas de hex en dur).
-        accent = "#" + moteur.THEMES[moteur.THEME_DEFAUT]["primaire"]
-        style.configure("Titre.TLabel", font=("Segoe UI", 16, "bold"), foreground=accent)
-        style.configure("SousTitre.TLabel", font=("Segoe UI", 9), foreground="#666")
-        style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        self._appliquer_theme_fenetre()
+
+    def _appliquer_theme_fenetre(self, *_) -> None:
+        """Applique le mode d'affichage (Système / Clair / Sombre) via sv-ttk si présent."""
+        dark = False
+        if HAS_SVTTK:
+            choix = WINDOW_KEY.get(self.var_apparence.get(), "systeme")
+            if choix == "systeme":
+                sys_mode = darkdetect.theme() if HAS_DARKDETECT else None
+                dark = (sys_mode or "Light").lower() == "dark"
+            else:
+                dark = choix == "sombre"
+            sv_ttk.set_theme("dark" if dark else "light")
+        self._config_styles(dark)
+
+    def _config_styles(self, dark: bool = False) -> None:
+        # set_theme réinitialise les styles : on (re)pose nos styles custom après chaque bascule.
+        # Accent de marque dérivé du registre de thèmes (clair) ; bleu clair lisible en sombre.
+        accent = "#7FB3FF" if dark else "#" + moteur.THEMES[moteur.THEME_DEFAUT]["primaire"]
+        sous = "#AAAAAA" if dark else "#666666"
+        self._style.configure("Titre.TLabel", font=("Segoe UI", 16, "bold"), foreground=accent)
+        self._style.configure("SousTitre.TLabel", font=("Segoe UI", 9), foreground=sous)
+        self._style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
 
     def _construire(self) -> None:
         ttk.Label(self, text="Générateur de suivi des loyers", style="Titre.TLabel").pack(
@@ -383,6 +414,17 @@ class Application(tk.Tk):
         ttk.Label(apf, text="Police").grid(row=0, column=2, padx=(24, 8), pady=6, sticky="w")
         ttk.Combobox(apf, textvariable=self.var_police, values=POLICES,
                      state="readonly", width=18).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        # Affichage de la fenêtre (clair / sombre / suit Windows) — distinct du thème du classeur.
+        ttk.Label(apf, text="Fenêtre").grid(row=1, column=0, padx=8, pady=(0, 8), sticky="w")
+        cb_app = ttk.Combobox(apf, textvariable=self.var_apparence,
+                              values=[lbl for _, lbl in WINDOW_THEMES],
+                              state="readonly" if HAS_SVTTK else "disabled", width=22)
+        cb_app.grid(row=1, column=1, padx=8, pady=(0, 8), sticky="w")
+        cb_app.bind("<<ComboboxSelected>>", self._appliquer_theme_fenetre)
+        if not HAS_SVTTK:
+            ttk.Label(apf, text="(thème clair/sombre indisponible : sv-ttk non installé)",
+                      style="SousTitre.TLabel").grid(row=1, column=2, columnspan=2,
+                                                     padx=8, sticky="w")
 
         lf = ttk.LabelFrame(self, text="Locataires", style="Section.TLabelframe")
         lf.pack(fill="both", expand=True, padx=14, pady=6)
