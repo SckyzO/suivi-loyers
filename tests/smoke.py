@@ -373,6 +373,14 @@ def main() -> int:
         assert wsd.page_setup.fitToWidth == 1 and wsd.page_setup.fitToHeight == 1, nom
         assert wsd.sheet_properties.pageSetUpPr and wsd.sheet_properties.pageSetUpPr.fitToPage, nom
         assert wsd.print_options.horizontalCentered, nom
+        # Design thémé : filet d'accent sous le titre + ligne de total surlignée.
+        assert wsd.cell(2, 2).border.bottom and wsd.cell(2, 2).border.bottom.style, nom
+        calc = g.resoudre_charte().calc
+        def _fill6(c):
+            fg = c.fill.fgColor
+            return fg.rgb[-6:] if fg and fg.rgb and fg.rgb != "00000000" else None
+        surligne = any(_fill6(wsd.cell(r, 2)) == calc for r in range(13, 20))
+        assert surligne, (nom, "aucune ligne de total surlignée")
 
     print("SMOKE OK")
     return 0

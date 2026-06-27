@@ -1304,7 +1304,11 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     titre = ws["B2"]
     titre.value = spec["titre"]
     titre.font = Font(bold=True, size=18, color=CHARTE.primaire)
-    titre.alignment = Alignment(horizontal="center")
+    titre.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 26
+    # Filet d'accent du thème sous le titre, sur toute la largeur du contenu.
+    for col in range(2, 6):
+        ws.cell(2, col).border = Border(bottom=Side(style="medium", color=CHARTE.primaire))
 
     # Sélecteurs.
     ws["B4"] = "Locataire :"
@@ -1332,14 +1336,14 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     # Bloc bailleur (gauche) et locataire (droite).
     b = cfg["bailleur"]
     ws["B7"] = "Le bailleur :"
-    ws["B7"].font = Font(bold=True)
+    ws["B7"].font = Font(bold=True, color=CHARTE.primaire)
     ecrire_texte(ws, 8, 2, b.get("nom", ""))
     for i, k in enumerate(("adresse", "tel", "email"), start=9):
         if b.get(k):
             ecrire_texte(ws, i, 2, str(b[k]))
 
     ws["D7"] = "Le locataire :"
-    ws["D7"].font = Font(bold=True)
+    ws["D7"].font = Font(bold=True, color=CHARTE.primaire)
     ws["D8"] = "=$C$4"
     ws["D9"] = f"={vlook('identifiant')}"
     ws["D10"] = f"={vlook('adresse')}"
@@ -1370,26 +1374,40 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
             lignes.append(("Déjà reçu", sif("Suivi_TotalRecu")))
             lignes.append(("Reste dû", f'{sif("Suivi_TotalDu")}-{sif("Suivi_TotalRecu")}'))
 
+    # Récap encadré : libellé (B) + valeur (C). Les lignes de total sont surlignées
+    # dans la teinte douce du thème pour ressortir sans alourdir.
+    _fill_total = PatternFill("solid", fgColor=CHARTE.calc)
+
+    def _ligne_recap(r: int, label: str, *, gras: bool, total: bool):
+        lab = ws.cell(r, 2, label)
+        lab.font = Font(bold=gras)
+        lab.alignment = Alignment(horizontal="left", vertical="center")
+        lab.border = BORDURE
+        val = ws.cell(r, 3)
+        val.font = Font(bold=gras)
+        val.alignment = Alignment(horizontal="right", vertical="center")
+        val.border = BORDURE
+        if total:
+            lab.fill = val.fill = _fill_total
+        return val
+
     montant_row = r0
     for i, (label, formule) in enumerate(lignes):
         r = r0 + i
-        gras = label.startswith(("Montant total", "Total", "Reste dû"))
-        ws.cell(r, 2, label).font = Font(bold=gras)
-        cell = ws.cell(r, 3, f"={formule}")
-        cell.number_format = FMT_EURO
-        cell.border = BORDURE
-        if gras:
+        total = label.startswith(("Montant total", "Total", "Reste dû"))
+        val = _ligne_recap(r, label, gras=total, total=total)
+        val.value = f"={formule}"
+        val.number_format = FMT_EURO
+        if total:
             montant_row = r
     montant_cell = f"$C${montant_row}"
 
     fin = r0 + len(lignes)
     if kind == "quittance":
         r_date = fin
-        ws.cell(r_date, 2, "Date de paiement").font = Font(bold=True)
-        cd = ws.cell(r_date, 3,
-                     f'=IF({sif("Suivi_LocRecu")}=0,"",{sif("Suivi_LocDate")})')
+        cd = _ligne_recap(r_date, "Date de paiement", gras=True, total=False)
+        cd.value = f'=IF({sif("Suivi_LocRecu")}=0,"",{sif("Suivi_LocDate")})'
         cd.number_format = FMT_DATE
-        cd.border = BORDURE
         fin = r_date + 1
 
     # Corps + mention.
