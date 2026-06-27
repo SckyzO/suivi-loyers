@@ -398,11 +398,16 @@ def main() -> int:
 
     # 11) Onglets larges imprimables : paysage, ajusté en largeur seule (hauteur libre),
     #     sans toucher aux largeurs de colonnes.
-    for nom in ("Guide", "Bilan", "Régularisation charges", "Révision IRL", "Tableau de bord"):
+    for nom in ("Bilan", "Régularisation charges", "Révision IRL", "Tableau de bord"):
         wsl = wd9[nom]
         assert wsl.page_setup.orientation == "landscape", (nom, wsl.page_setup.orientation)
         assert wsl.page_setup.fitToWidth == 1 and wsl.page_setup.fitToHeight == 0, nom
         assert wsl.sheet_properties.pageSetUpPr and wsl.sheet_properties.pageSetUpPr.fitToPage, nom
+    # Le Guide est forcé sur une seule page (largeur ET hauteur) : « Liens utiles » ne déborde pas.
+    gui = wd9["Guide"]
+    assert gui.page_setup.orientation == "landscape", gui.page_setup.orientation
+    assert gui.page_setup.fitToWidth == 1 and gui.page_setup.fitToHeight == 1, "Guide non forcé 1 page"
+    assert gui.sheet_properties.pageSetUpPr and gui.sheet_properties.pageSetUpPr.fitToPage, "Guide fitToPage"
 
     # 12) Cohérence design : lignes de total surlignées à la teinte du thème (Bilan + locataire).
     calc6 = g.resoudre_charte().calc

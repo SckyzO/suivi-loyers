@@ -1664,7 +1664,7 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
                       "loyer attendu du suivi mensuel (lien officiel ci-dessous).")
     for i, texte in enumerate(etapes, 1):
         pastille(r, str(i), CHARTE.onglet_systeme, texte, texte_blanc=True)
-        ws.row_dimensions[r].height = 30
+        ws.row_dimensions[r].height = 26
         r += 1
     r += 1
 
@@ -1849,11 +1849,17 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     # Impression des onglets larges : paysage, ajusté en largeur (hauteur libre), pour
     # rester lisible sans modifier les largeurs de colonnes. Les documents gardent leur
     # mise en page portrait une page (posée dans construire_document).
-    for nom in ("Guide", "Bilan", "Régularisation charges", "Révision IRL"):
+    for nom in ("Bilan", "Régularisation charges", "Révision IRL"):
         if nom in wb.sheetnames:
             ws = wb[nom]
             mettre_en_page_impression(ws, ws.dimensions, paysage=True,
                                       hauteur_pages=0, centre=False)
+    # Le Guide est une fiche de référence : on le force sur une seule page (largeur ET
+    # hauteur), pour que « Liens utiles » ne déborde jamais en page 2.
+    if "Guide" in wb.sheetnames:
+        guide = wb["Guide"]
+        mettre_en_page_impression(guide, guide.dimensions, paysage=True,
+                                  hauteur_pages=1, centre=False)
     if "Tableau de bord" in wb.sheetnames:
         # Graphiques hors plage de cellules : pas de zone explicite, le tableur les inclut.
         mettre_en_page_impression(wb["Tableau de bord"], None, paysage=True,
