@@ -39,6 +39,7 @@ pyinstaller --onefile --windowed --noconfirm --clean ^
   --collect-submodules openpyxl ^
   --collect-all tkcalendar ^
   --collect-all babel ^
+  --collect-data sv_ttk ^
   --hidden-import babel.numbers ^
   interface.py || goto :erreur
 

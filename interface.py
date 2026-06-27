@@ -28,6 +28,14 @@ try:
 except Exception:  # noqa: BLE001
     HAS_CAL = False
 
+# Thème moderne optionnel (look Windows 11). Absent → repli sur le thème ttk « clam ».
+# L'interface reste pleinement fonctionnelle dans les deux cas.
+try:
+    import sv_ttk
+    HAS_SVTTK = True
+except Exception:  # noqa: BLE001
+    HAS_SVTTK = False
+
 APP_TITRE = "Suivi des loyers — générateur"
 ANNEE = dt.date.today().year
 TYPES_BIEN = moteur.TYPES_BIEN
@@ -263,23 +271,32 @@ class Application(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITRE)
-        self.minsize(900, 660)
+        self.minsize(940, 720)  # widgets sv-ttk un peu plus hauts que clam
         self.locataires: list[dict] = []
         self._init_style()
         self._construire()
 
     def _init_style(self) -> None:
         style = ttk.Style(self)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-        style.configure("Titre.TLabel", font=("Segoe UI", 15, "bold"), foreground="#1F4E79")
+        if HAS_SVTTK:
+            sv_ttk.set_theme("light")          # look Windows 11 (mode clair)
+        else:
+            try:
+                style.theme_use("clam")
+            except tk.TclError:
+                pass
+        # Accent de marque dérivé du registre de thèmes (pas de hex en dur).
+        accent = "#" + moteur.THEMES[moteur.THEME_DEFAUT]["primaire"]
+        style.configure("Titre.TLabel", font=("Segoe UI", 16, "bold"), foreground=accent)
+        style.configure("SousTitre.TLabel", font=("Segoe UI", 9), foreground="#666")
         style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
 
     def _construire(self) -> None:
         ttk.Label(self, text="Générateur de suivi des loyers", style="Titre.TLabel").pack(
-            anchor="w", padx=14, pady=(12, 4))
+            anchor="w", padx=14, pady=(12, 0))
+        ttk.Label(self, style="SousTitre.TLabel",
+                  text="Remplissez le formulaire puis cliquez « Générer le fichier Excel ». "
+                       "Aucune connaissance technique requise.").pack(anchor="w", padx=14, pady=(0, 6))
 
         bf = ttk.LabelFrame(self, text="Bailleur", style="Section.TLabelframe")
         bf.pack(fill="x", padx=14, pady=6)
@@ -347,7 +364,7 @@ class Application(tk.Tk):
                         variable=self.var_tableau).pack(anchor="w", padx=8, pady=1)
         ttk.Checkbutton(mf, text="Régularisation annuelle des charges",
                         variable=self.var_regul).pack(anchor="w", padx=8, pady=1)
-        ttk.Checkbutton(mf, text="Révision IRL (calcul du loyer révisé)",
+        ttk.Checkbutton(mf, text="Révision IRL (loyer revalorisé répercuté dans le suivi)",
                         variable=self.var_irl).pack(anchor="w", padx=8, pady=1)
 
         apf = ttk.LabelFrame(self, text="Apparence", style="Section.TLabelframe")
@@ -389,7 +406,9 @@ class Application(tk.Tk):
         self.var_save_config = tk.BooleanVar(value=True)
         ttk.Checkbutton(af, text="Enregistrer aussi la configuration",
                         variable=self.var_save_config).pack(side="left", padx=(16, 0))
-        ttk.Button(af, text="Générer le fichier Excel", command=self._generer).pack(side="right")
+        # Action principale mise en avant (style accentué si sv-ttk est présent).
+        ttk.Button(af, text="Générer le fichier Excel", command=self._generer,
+                   style="Accent.TButton").pack(side="right")
 
     # ------------------------- gestion locataires ------------------------- #
 
