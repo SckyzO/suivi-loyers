@@ -164,14 +164,19 @@ class DialogueLocataire(tk.Toplevel):
         self._depot = depot
         ligne = 0
 
+        # Champs alignés : label en colonne 0, champ étiré en colonne 1 (sticky ew) pour
+        # que tous les bords gauche/droit coïncident quelle que soit la longueur du label.
+        self.columnconfigure(1, weight=1)
+
         def libelle(texte: str) -> None:
             nonlocal ligne
-            ttk.Label(self, text=texte).grid(row=ligne, column=0, sticky="w", padx=8, pady=3)
+            ttk.Label(self, text=texte).grid(row=ligne, column=0, sticky="w", padx=(10, 6), pady=3)
 
         def entree(cle: str, *, num=False) -> None:
             nonlocal ligne
             var = tk.StringVar(value=str(v[cle]) if v.get(cle) not in (None, "") else "")
-            ttk.Entry(self, textvariable=var, width=34).grid(row=ligne, column=1, padx=8, pady=3)
+            ttk.Entry(self, textvariable=var, width=30).grid(
+                row=ligne, column=1, sticky="ew", padx=(0, 10), pady=3)
             self._vars[cle] = var
             if num:
                 self._champs_num.add(cle)
@@ -180,9 +185,9 @@ class DialogueLocataire(tk.Toplevel):
         def combo(cle: str, valeurs_combo: list[str], *, readonly=False, defaut="") -> None:
             nonlocal ligne
             var = tk.StringVar(value=str(v.get(cle, defaut)) or defaut)
-            cb = ttk.Combobox(self, textvariable=var, values=valeurs_combo, width=32,
+            cb = ttk.Combobox(self, textvariable=var, values=valeurs_combo, width=30,
                               state="readonly" if readonly else "normal")
-            cb.grid(row=ligne, column=1, padx=8, pady=3)
+            cb.grid(row=ligne, column=1, sticky="ew", padx=(0, 10), pady=3)
             self._vars[cle] = var
             ligne += 1
             return cb
@@ -191,7 +196,7 @@ class DialogueLocataire(tk.Toplevel):
         libelle("Prénom"); entree("prenom")
         libelle("Type de bien"); combo("type_bien", TYPES_BIEN, readonly=True,
                                        defaut=v.get("type_bien", TYPES_BIEN[0]))
-        libelle("N° d'appartement / Nom de la maison"); entree("identifiant")
+        libelle("N° appart. / Nom du bien"); entree("identifiant")
         libelle("Adresse du logement"); combo("adresse", adresses)
         if split:
             libelle("Loyer nu (€)"); entree("loyer_nu", num=True)
@@ -205,7 +210,7 @@ class DialogueLocataire(tk.Toplevel):
 
         libelle("Date d'entrée")
         self.date_entree = ChampDate(self, v.get("date_entree", ""))
-        self.date_entree.grid(row=ligne, column=1, sticky="w", padx=8, pady=3)
+        self.date_entree.grid(row=ligne, column=1, sticky="w", padx=(0, 10), pady=3)
         ligne += 1
 
         # Bloc « locataire parti » : active date de sortie + caution + observation.
@@ -217,7 +222,7 @@ class DialogueLocataire(tk.Toplevel):
 
         libelle("Date de sortie")
         self.date_sortie = ChampDate(self, v.get("date_sortie", ""))
-        self.date_sortie.grid(row=ligne, column=1, sticky="w", padx=8, pady=3)
+        self.date_sortie.grid(row=ligne, column=1, sticky="w", padx=(0, 10), pady=3)
         ligne += 1
 
         self.var_caution = tk.BooleanVar(value=bool(v.get("caution_rendue")))
