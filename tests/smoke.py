@@ -345,6 +345,9 @@ def main() -> int:
         tc = wt["Bilan"].sheet_properties.tabColor
         assert tc and tc.rgb[-6:] == spec["primaire"], (tid, tc.rgb if tc else None)
         assert wt["Guide"]["B1"].font.name == "Tahoma", (tid, wt["Guide"]["B1"].font.name)
+        # Le tableau Locataires suit la teinte du thème (pas un bleu figé).
+        tbl = next(iter(wt["Locataires"].tables.values()))
+        assert tbl.tableStyleInfo.name == spec["table"], (tid, tbl.tableStyleInfo.name)
     cfg_inc, av_inc = g.migrer_config(dict(CFG_COMPLET, theme="nimportequoi"))
     assert cfg_inc["theme"] == "classique" and any("inconnu" in a for a in av_inc), (cfg_inc["theme"], av_inc)
     # Police personnalisée respectée.

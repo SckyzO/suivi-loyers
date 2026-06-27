@@ -92,6 +92,7 @@ THEMES: dict[str, dict] = {
         "locat": "548235",      # onglets feuilles locataire
         "docs": "C55A11",       # onglets documents
         "donnees": "808080",    # onglet Données (masqué)
+        "table": "TableStyleMedium2",  # style du tableau Locataires (famille de teinte)
     },
     "refresh-bleu": {
         "label": "Refresh bleu",
@@ -107,6 +108,7 @@ THEMES: dict[str, dict] = {
         "locat": "4E7A4E",
         "docs": "C06A3E",
         "donnees": "8C8780",
+        "table": "TableStyleMedium2",   # bleu
     },
     "denim-rust": {
         "label": "Denim & Rust",
@@ -122,6 +124,7 @@ THEMES: dict[str, dict] = {
         "locat": "5E806B",
         "docs": "B5603F",
         "donnees": "8C8780",
+        "table": "TableStyleMedium3",   # rouille
     },
     "monochrome-noir": {
         "label": "Monochrome Noir",
@@ -137,6 +140,7 @@ THEMES: dict[str, dict] = {
         "locat": "3D3D3D",
         "docs": "6E6E6E",
         "donnees": "9A9A9A",
+        "table": "TableStyleMedium4",   # gris neutre
     },
     "ocean-deep": {
         "label": "Ocean Deep",
@@ -152,6 +156,7 @@ THEMES: dict[str, dict] = {
         "locat": "2A9D8F",
         "docs": "E76F51",
         "donnees": "87A0A8",
+        "table": "TableStyleMedium6",   # bleu clair (proche turquoise)
     },
 }
 THEME_DEFAUT = "classique"
@@ -175,6 +180,7 @@ class Charte:
     onglet_donnees: str
     fond: str
     police: str
+    table: str
 
 
 def resoudre_charte(theme: str | None = None, police: str | None = None) -> Charte:
@@ -201,6 +207,7 @@ def resoudre_charte(theme: str | None = None, police: str | None = None) -> Char
         onglet_donnees=t["donnees"],
         fond=t["fond"],
         police=police or POLICE_DEFAUT,
+        table=t.get("table", "TableStyleMedium2"),
     )
 
 
@@ -842,7 +849,7 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
 
     der_col = lettre[cols[-1][0]]
     table = Table(displayName="TblLocataires", ref=f"A1:{der_col}{derniere}")
-    table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+    table.tableStyleInfo = TableStyleInfo(name=CHARTE.table, showRowStripes=True)
     ws.add_table(table)
     ws.freeze_panes = "B2"
 

@@ -62,8 +62,10 @@ Flux de données clé :
   conditionnel avec `fgColor` seul N'APPARAÎT PAS dans Excel (bug corrigé).
 - **Identité graphique** : toutes les couleurs viennent de l'objet `CHARTE` (jamais de hex en
   dur). `CHARTE` est résolu par `resoudre_charte(theme, police)` en tête de `generer_workbook`
-  depuis le **registre `THEMES`** (id → couleurs). Ajouter un thème = une entrée du registre,
-  rien d'autre à toucher (l'interface lit `THEMES` pour sa liste). Défaut = `classique` (look
+  depuis le **registre `THEMES`** (id → couleurs + clé `table` = style de tableau Excel
+  intégré pour l'onglet Locataires, dans la famille de teinte du thème ; fallback
+  `TableStyleMedium2` si absente). Ajouter un thème = une entrée du registre, rien d'autre à
+  toucher (l'interface lit `THEMES` pour sa liste). Défaut = `classique` (look
   historique). Thème inconnu → fallback `classique` + avertissement (via `migrer_config`). La
   **police** est appliquée en dernière passe par `appliquer_police(wb, police)` (réécrit le nom
   sur chaque cellule en préservant gras/taille/couleur ; modifier le style « Normal » ne se
