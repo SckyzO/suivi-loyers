@@ -155,10 +155,12 @@ class ChampDate:
         x = self.entry.winfo_rootx()
         y = self.entry.winfo_rooty() + self.entry.winfo_height() + 2
         pop.wm_geometry(f"+{x}+{y}")
+        # sv-ttk ne thématise pas le Calendar (widget non-ttk) : on lui passe couleurs + police.
+        # Une police plus grande agrandit les cases des jours et le rend plus lisible.
         cal = Calendar(pop, selectmode="day", year=d.year, month=d.month, day=d.day,
-                       date_pattern="yyyy-mm-dd", showweeknumbers=False,
-                       firstweekday="monday", **couleurs)
-        cal.pack()
+                       date_pattern="yyyy-mm-dd", showweeknumbers=False, firstweekday="monday",
+                       font="TkDefaultFont 11", **couleurs)
+        cal.pack(padx=2, pady=2)
         # Remonter au-dessus du dialogue modal et prendre la main (sinon invisible/inerte).
         pop.update_idletasks()
         pop.lift()
