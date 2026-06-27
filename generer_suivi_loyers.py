@@ -50,6 +50,10 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.page import PageMargins
 from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.chart import BarChart, Reference
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.text import (
+    Paragraph, ParagraphProperties, CharacterProperties, Font as PoliceDessin,
+)
 
 # --------------------------------------------------------------------------- #
 # Constantes
@@ -649,6 +653,34 @@ def appliquer_police(wb: Workbook, police: str) -> None:
                     nf = copy(f)
                     nf.name = police
                     cell.font = nf
+        for chart in getattr(ws, "_charts", []):
+            _police_graphique(chart, police)
+
+
+def _txpr(police: str, *, gras: bool = False) -> RichText:
+    """Propriétés de texte (police) pour un élément de graphique (axe, légende)."""
+    cp = CharacterProperties(latin=PoliceDessin(typeface=police), b=gras)
+    return RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
+
+
+def _police_graphique(chart, police: str) -> None:
+    """Applique la police d'identité au texte d'un graphique (titre, axes, légende) :
+    openpyxl ne couvre pas le texte des graphiques via les polices de cellule, il y
+    resterait donc du Calibri."""
+    chart.x_axis.txPr = _txpr(police)
+    chart.y_axis.txPr = _txpr(police)
+    if chart.legend is not None:
+        chart.legend.txPr = _txpr(police)
+    # Titre : texte déjà posé en RichText ; on force la police sur chaque paragraphe/run.
+    rich = getattr(getattr(chart.title, "tx", None), "rich", None)
+    if rich is not None:
+        for para in rich.p:
+            cp = CharacterProperties(latin=PoliceDessin(typeface=police), b=True)
+            if para.pPr is None:
+                para.pPr = ParagraphProperties()
+            para.pPr.defRPr = cp
+            for run in (para.r or []):
+                run.rPr = cp
 
 
 # Largeur de colonne = nombre de caractères de la police de base du classeur

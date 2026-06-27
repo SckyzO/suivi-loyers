@@ -382,6 +382,17 @@ def main() -> int:
         surligne = any(_fill6(wsd.cell(r, 2)) == calc for r in range(13, 20))
         assert surligne, (nom, "aucune ligne de total surlignée")
 
+    # 10) Police des graphiques : titre/axes/légende suivent la police d'identité
+    #     (openpyxl ne couvre pas le texte des graphiques via les polices de cellule).
+    import zipfile
+    with zipfile.ZipFile(f1) as z:
+        charts = [n for n in z.namelist()
+                  if n.startswith("xl/charts/chart") and n.endswith(".xml")]
+        assert charts, "aucun graphique généré"
+        for n in charts:
+            xml = z.read(n).decode()
+            assert "Tahoma" in xml and "Calibri" not in xml, (n, "police du graphique")
+
     print("SMOKE OK")
     return 0
 
