@@ -421,6 +421,16 @@ class Application(tk.Tk):
         self._style.configure("Titre.TLabel", font=("Segoe UI", 16, "bold"), foreground=accent)
         self._style.configure("SousTitre.TLabel", font=("Segoe UI", 9), foreground=sous)
         self._style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        # sv-ttk ne thématise pas la LISTE déroulante des Combobox (popdown = tk.Listbox natif).
+        # On force ses couleurs via l'option database (appliquée à toute l'app, dialogues compris).
+        if dark:
+            lb_bg, lb_fg, lb_sb, lb_sf = "#2b2b2b", "#f0f0f0", "#4cc2ff", "#06243a"
+        else:
+            lb_bg, lb_fg, lb_sb, lb_sf = "#ffffff", "#1a1a1a", "#0067c0", "#ffffff"
+        self.option_add("*TCombobox*Listbox.background", lb_bg)
+        self.option_add("*TCombobox*Listbox.foreground", lb_fg)
+        self.option_add("*TCombobox*Listbox.selectBackground", lb_sb)
+        self.option_add("*TCombobox*Listbox.selectForeground", lb_sf)
 
     def _construire(self) -> None:
         # ---- En-tête : titre + sous-titre à gauche, bascule d'affichage à droite ----
