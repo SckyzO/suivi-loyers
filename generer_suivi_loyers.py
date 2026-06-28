@@ -47,6 +47,7 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.page import PageMargins
 from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.chart import BarChart, Reference
+from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.text import RichText
 from openpyxl.drawing.text import (
     Paragraph, ParagraphProperties, CharacterProperties, Font as PoliceDessin,
@@ -1397,15 +1398,23 @@ def construire_tableau_bord(wb: Workbook, cfg: dict, layout: dict) -> None:
         vc.number_format = fmt
     ws.row_dimensions[5].height = 26
 
+    # Palette de séries cohérente avec le thème (jamais les couleurs par défaut
+    # d'openpyxl) : 1ʳᵉ série = primaire, 2ᵉ = vert « locataire », etc.
+    palette = [CHARTE.primaire, CHARTE.onglet_locataire, CHARTE.onglet_document,
+               CHARTE.lien]
+
     def graphe(g, ancre_row, caption):
         cap = ws.cell(ancre_row - 1, 2, caption)
         cap.font = Font(italic=True, color=CHARTE.onglet_donnees)
         g.height, g.width = 8, 16
         g.legend.position = "b"
-        # Style intégré 2 = « Style 1 » de la galerie Excel (barres pleines colorées,
-        # coins arrondis) : rendu soigné dès la génération, sans repasser par Excel.
-        g.style = 2
+        g.style = 2            # repli hérité (Excel) ; le rendu vient des fills ci-dessous
         g.roundedCorners = True
+        # Remplissages pleins aux couleurs du thème : barres nettes, look soigné dès
+        # la génération (Excel ET LibreOffice), sans passer par les styles Excel.
+        for i, s in enumerate(g.series):
+            s.graphicalProperties = GraphicalProperties(
+                solidFill=palette[i % len(palette)])
         ws.add_chart(g, f"B{ancre_row}")
 
     cats_loc = Reference(bilan, min_col=pos["nom"], min_row=glob["first"], max_row=glob["last"])
