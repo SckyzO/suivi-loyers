@@ -55,6 +55,16 @@ def main() -> int:
     f1 = tmp / "complet.xlsx"
     g.generer_workbook(g.valider_config(CFG_COMPLET), f1)
     wb = load_workbook(f1)
+    # style_excel (défaut True) : parties chartStyle/colorStyle Microsoft injectées.
+    import zipfile
+    with zipfile.ZipFile(f1) as _zf:
+        _noms = _zf.namelist()
+        assert "xl/charts/style1.xml" in _noms and "xl/charts/colors1.xml" in _noms, _noms
+        assert "chartstyle+xml" in _zf.read("[Content_Types].xml").decode()
+    fns = tmp / "nostyle.xlsx"
+    g.generer_workbook(g.valider_config({**CFG_COMPLET, "style_excel": False}), fns)
+    with zipfile.ZipFile(fns) as _zf:
+        assert "xl/charts/style1.xml" not in _zf.namelist(), "style injecté malgré style_excel=False"
     # Onglet locataire nommé « identifiant - Nom » (évite les doublons même appartement).
     # Tableau de bord en 2e position (juste après le Guide).
     attendus = ["Guide", "Tableau de bord", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob",

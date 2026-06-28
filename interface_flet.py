@@ -496,6 +496,7 @@ class AppLoyers:
             "modules": self._modules_courants(),
             "theme": self._theme_id_courant(),
             "police": self.police.value or moteur.POLICE_DEFAUT,
+            "style_excel": self.style_excel.value,
             "locataires": self.locataires,
         }
 
@@ -811,6 +812,7 @@ class AppLoyers:
         self.theme.value = THEME_LABEL.get(
             cfg.get("theme", moteur.THEME_DEFAUT), THEME_LABEL[moteur.THEME_DEFAUT])
         self.police.value = cfg.get("police", moteur.POLICE_DEFAUT)
+        self.style_excel.value = bool(cfg.get("style_excel", True))
         self.locataires = list(cfg.get("locataires", []) or [])
         self._appliquer_apparence()
         self._rafraichir_table()
@@ -911,6 +913,7 @@ class AppLoyers:
         self.police = champ_liste(POLICES, moteur.POLICE_DEFAUT, "Police",
                                   expand=True,
                                   icone=ft.Icons.FONT_DOWNLOAD_OUTLINED)
+        self.style_excel = ft.Switch(label="Générer pour Microsoft Excel", value=True)
         lien_gh = ft.OutlinedButton(
             "Voir sur GitHub", icon=ft.Icons.CODE, style=STYLE_BTN,
             on_click=self._ouvrir_github, disabled=not GITHUB_URL)
@@ -920,6 +923,10 @@ class AppLoyers:
             rangee_apparence,
             titre_section("Apparence du classeur", ft.Icons.PALETTE_OUTLINED),
             self.theme, self.police,
+            self._avec_aide(self.style_excel,
+                "Applique aux graphiques du tableau de bord le style natif de Microsoft "
+                "Excel (barres pleines, coins arrondis) — recommandé si vous ouvrez le "
+                "fichier dans Excel. Décochez pour un rendu neutre (ex. LibreOffice)."),
             titre_section("À propos", ft.Icons.INFO_OUTLINE),
             ft.Text(f"{APP_TITRE} — version {APP_VERSION}", size=TS_CORPS,
                     weight=ft.FontWeight.W_500),
