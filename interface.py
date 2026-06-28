@@ -497,7 +497,6 @@ class Application(tk.Tk):
         self.var_mode = tk.StringVar(value=MODE_LABEL["comprises"])
         self.var_theme = tk.StringVar(value=THEME_LABEL[moteur.THEME_DEFAUT])
         self.var_police = tk.StringVar(value=moteur.POLICE_DEFAUT)
-        self.var_style_excel = tk.BooleanVar(value=True)
 
         def ligne(parent, r, label, widget):
             """Ligne label/champ alignée : labels en colonne 0, champ étiré en colonne 1."""
@@ -561,13 +560,6 @@ class Application(tk.Tk):
                            values=[THEME_LABEL[t] for t in moteur.THEMES], state="readonly"))
         ligne(apf, 1, "Police",
               ttk.Combobox(apf, textvariable=self.var_police, values=POLICES, state="readonly"))
-        ttk.Checkbutton(apf, text="Générer pour Microsoft Excel",
-                        variable=self.var_style_excel, style="Switch.TCheckbutton").grid(
-                            row=2, column=0, columnspan=2, sticky="w", padx=8, pady=(6, 0))
-        ttk.Label(apf, foreground="#888888", wraplength=300, justify="left",
-                  text="Applique le style de graphique natif d'Excel au tableau de bord "
-                       "(recommandé pour Excel). Décochez pour un rendu neutre (LibreOffice).").grid(
-                            row=3, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 4))
 
         # -- Locataires : pleine largeur, sous le bandeau, extensible en hauteur --
         lf = ttk.LabelFrame(body, text="Locataires", style="Section.TLabelframe")
@@ -674,7 +666,6 @@ class Application(tk.Tk):
             "modules": self._modules(),
             "theme": THEME_KEY.get(self.var_theme.get(), moteur.THEME_DEFAUT),
             "police": self.var_police.get() or moteur.POLICE_DEFAUT,
-            "style_excel": self.var_style_excel.get(),
             "locataires": self.locataires,
         }
 
@@ -706,7 +697,6 @@ class Application(tk.Tk):
         theme = cfg.get("theme") if cfg.get("theme") in THEME_LABEL else moteur.THEME_DEFAUT
         self.var_theme.set(THEME_LABEL[theme])
         self.var_police.set(cfg.get("police") or moteur.POLICE_DEFAUT)
-        self.var_style_excel.set(bool(cfg.get("style_excel", True)))
         self.locataires = list(cfg.get("locataires", []))
         self._rafraichir_tree()
 

@@ -8,8 +8,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Code du générateur (+ templates de style de graphique Microsoft).
-COPY generer_suivi_loyers.py chart_style.py ./
+# Code du générateur.
+COPY generer_suivi_loyers.py .
 
 # Les configs (entrée) et la sortie sont montées au runtime via -v.
 #   configs/  -> /app/configs   (lecture)

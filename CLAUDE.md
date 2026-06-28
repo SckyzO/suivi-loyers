@@ -145,18 +145,14 @@ sont préservées par `recolter_regularisation` et `recolter_irl`, en plus de `r
   en Excel FR le `.` est mal interprété → 4,62 au lieu de 461,61). `date_bail` saisi en ISO est
   affiché en JJ/MM/AAAA dans le référentiel.
 
-- **Style des graphes du tableau de bord** (clé config `style_excel`, défaut `True`, case
-  « Générer pour Microsoft Excel » dans les deux UIs). Deux couches, cumulatives :
-  (1) lisibilité TOUJOURS, via `graphe()`/`_police_graphique` : couleurs de séries explicites
-  `spPr` (palette Office `4472C4`/`ED7D31`/… si `style_excel`, sinon CHARTE), axe `#,##0`
-  (« 25 000 », pas « 25,000.00 € »), polices 10 pt axes / 14 pt titre, quadrillage clair —
-  honoré par Excel ET LibreOffice. (2) si `style_excel`, `_appliquer_style_excel` post-traite le
-  `.xlsx` (zip) pour le **vrai « Style 1 » d'Excel** : openpyxl émet des graphes « anciens »
-  qu'Excel ne style pas (Microsoft Q&A) ; on **marque chaque `chart.xml` comme moderne** (bloc
-  `mc:AlternateContent`/`c14:style`, namespace par défaut → fallback `<style>` sans préfixe `c:`),
-  puis on injecte les parties `chartStyle`/`colorStyle` (templates `chart_style.py`), relations et
-  content-types. Refs de données = celles d'openpyxl (robuste aux changements). **Non vérifiable
-  hors Excel** (LibreOffice ignore les styles MS). `chart_style.py` embarqué (Dockerfile + SRC).
+- **Lisibilité des graphes du tableau de bord** (`graphe()` / `_police_graphique`) : couleurs de
+  séries explicites `spPr` (palette Office `4472C4`/`ED7D31`/…), axe des montants `#,##0`
+  (« 25 000 », pas « 25,000.00 € »), polices 10 pt axes/légende et 14 pt gras pour le titre,
+  quadrillage clair. Honoré par Excel ET LibreOffice. NB : le **« Style 1 » natif d'Excel
+  (galerie 2013+) n'est PAS reproductible par programme** — openpyxl/xlsxwriter ne gèrent que les
+  styles 2007 (`<c:style>` 1-48), et l'injection des parties `chartStyle` modernes ne fonctionne
+  pas sur les graphes openpyxl (format « ancien »). Ne pas réessayer ; pour le Style 1 exact,
+  c'est un clic manuel dans Excel (pinceau). Feature `style_excel` retirée (cul-de-sac documenté).
 
 - **Bilan structuré** (`construire_bilan`) : titre + **évolution annuelle** (1 ligne/année,
   portefeuille) + **synthèse par locataire** (toutes années) + **un bloc détail par année**.
