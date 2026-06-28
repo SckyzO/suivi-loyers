@@ -36,9 +36,6 @@ from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
 
-# Chaîne numérique simple (autorise la virgule décimale d'une config éditée à la main).
-_NUM_TXT = re.compile(r"^-?\d+(?:[.,]\d+)?$")
-
 import yaml
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
@@ -54,6 +51,9 @@ from openpyxl.chart.text import RichText
 from openpyxl.drawing.text import (
     Paragraph, ParagraphProperties, CharacterProperties, Font as PoliceDessin,
 )
+
+# Chaîne numérique simple (autorise la virgule décimale d'une config éditée à la main).
+_NUM_TXT = re.compile(r"^-?\d+(?:[.,]\d+)?$")
 
 # --------------------------------------------------------------------------- #
 # Constantes
@@ -80,6 +80,7 @@ POLICE_DEFAUT = "Tahoma"   # police d'origine sur tout Windows (Aptos non stock 
 THEMES: dict[str, dict] = {
     "classique": {
         "label": "Classique",
+        "teinte": "bleu marine",
         "fond": "FFFFFF",
         "primaire": "1F4E79",   # bandeaux, titres, onglets « système »
         "saisie": "FFF7E6",     # jaune pâle : cellules à remplir
@@ -96,6 +97,7 @@ THEMES: dict[str, dict] = {
     },
     "refresh-bleu": {
         "label": "Refresh bleu",
+        "teinte": "bleu acier",
         "fond": "F0EEE6",
         "primaire": "234B73",
         "saisie": "FBF3DC",
@@ -112,6 +114,7 @@ THEMES: dict[str, dict] = {
     },
     "denim-rust": {
         "label": "Denim & Rust",
+        "teinte": "bleu denim & rouille",
         "fond": "F0EEE6",
         "primaire": "33455C",
         "saisie": "FBF2DC",
@@ -128,6 +131,7 @@ THEMES: dict[str, dict] = {
     },
     "monochrome-noir": {
         "label": "Monochrome Noir",
+        "teinte": "noir & gris",
         "fond": "F5F5F4",
         "primaire": "141414",
         "saisie": "F0EFEA",
@@ -144,6 +148,7 @@ THEMES: dict[str, dict] = {
     },
     "ocean-deep": {
         "label": "Ocean Deep",
+        "teinte": "bleu océan",
         "fond": "EEF2F4",
         "primaire": "0B3954",
         "saisie": "F6EFDD",
@@ -188,7 +193,8 @@ def resoudre_charte(theme: str | None = None, police: str | None = None) -> Char
     if theme and theme not in THEMES:
         warnings.warn(
             f"Thème « {theme} » inconnu : utilisation du thème par défaut "
-            f"« {THEME_DEFAUT} ». Thèmes disponibles : {', '.join(sorted(THEMES))}.")
+            f"« {THEME_DEFAUT} ». Thèmes disponibles : {', '.join(sorted(THEMES))}.",
+            stacklevel=2)
         theme = None
     t = THEMES[theme or THEME_DEFAUT]
     return Charte(
@@ -201,7 +207,7 @@ def resoudre_charte(theme: str | None = None, police: str | None = None) -> Char
         partiel=t["partiel"],
         attente=t["attente"],
         lien=t["lien"],
-        onglet_systeme=t["primaire"],   # onglets système = couleur primaire
+        onglet_systeme=t["primaire"],
         onglet_locataire=t["locat"],
         onglet_document=t["docs"],
         onglet_donnees=t["donnees"],
@@ -387,19 +393,19 @@ def valider_config(raw: dict) -> dict:
                     x = float(loc[champ])
                 except (TypeError, ValueError):
                     raise ValueError(
-                        f"Locataire « {ident} » : {champ} non numérique ({loc[champ]!r}).")
+                        f"Locataire « {ident} » : {champ} non numérique ({loc[champ]!r}).") from None
                 if not math.isfinite(x):
                     raise ValueError(f"Locataire « {ident} » : {champ} invalide.")
         try:
             de = _date(loc.get("date_entree"))
         except ValueError:
             raise ValueError(
-                f"Locataire « {ident} » : date d'entrée invalide ({loc.get('date_entree')!r}).")
+                f"Locataire « {ident} » : date d'entrée invalide ({loc.get('date_entree')!r}).") from None
         try:
             ds = _date(loc.get("date_sortie"))
         except ValueError:
             raise ValueError(
-                f"Locataire « {ident} » : date de sortie invalide ({loc.get('date_sortie')!r}).")
+                f"Locataire « {ident} » : date de sortie invalide ({loc.get('date_sortie')!r}).") from None
         if de and ds and ds < de:
             raise ValueError(f"Locataire « {ident} » : date de sortie avant la date d'entrée.")
         if ident in vus:
@@ -770,7 +776,7 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     ws.sheet_view.showGridLines = False
     ws.sheet_properties.tabColor = CHARTE.onglet_systeme
 
-    # Colonne 1 = identité (clé pour RECHERCHEV / listes). Type de bien APRÈS l'adresse.
+    # Colonne 1 = identité (clé pour VLOOKUP et listes déroulantes).
     cols: list[tuple[str, str]] = [
         ("locataire", "Locataire (Nom Prénom)"),
         ("identifiant", "N° appart. / Nom maison"),
@@ -801,8 +807,8 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
                 "loyer_nu": 13, "charges": 13, "loyer_total": 14, "part_caf": 16,
                 "reste": 16, "depot": 16, "date_entree": 13, "date_sortie": 13,
                 "caution": 14, "observation": 28}
-    for champ, l in lettre.items():
-        ws.column_dimensions[l].width = largeurs.get(champ, 14)
+    for champ, lettre_col in lettre.items():
+        ws.column_dimensions[lettre_col].width = largeurs.get(champ, 14)
 
     for r, loc in enumerate(cfg["locataires"], start=2):
         a_sortie = _date(loc.get("date_sortie")) is not None
@@ -962,8 +968,10 @@ def construire_feuilles_locataires(wb: Workbook, cfg: dict, ref_loc: dict,
                 ws.column_dimensions[get_column_letter(i)].hidden = True
         regler_hauteur_entete(ws, PL_LIGNE_ENTETE)
 
+        # rloc est stable sur toute l'itération du locataire ; refloc est appelé en
+        # synchrone (pas de capture différée) -> B023 faux positif.
         def refloc(field: str) -> str:
-            return "=" + _ref("Locataires", f"${lettre_loc[field]}${rloc}")
+            return "=" + _ref("Locataires", f"${lettre_loc[field]}${rloc}")  # noqa: B023
 
         # Mois groupés par année (pour insérer un total + une ligne vide entre les années).
         par_annee: dict = {}
@@ -1113,9 +1121,13 @@ def construire_donnees(wb: Workbook, cfg: dict, feuilles: list[dict]) -> None:
 # Onglet Bilan
 # --------------------------------------------------------------------------- #
 
-def construire_bilan(wb: Workbook, cfg: dict) -> None:
+def construire_bilan(wb: Workbook, cfg: dict) -> dict:
+    """Construit l'onglet Bilan : évolution annuelle (portefeuille) + synthèse par
+    locataire (toutes années) + un bloc détail par année. Renvoie les coordonnées
+    des blocs (consommées par construire_tableau_bord)."""
     caf = cfg["modules"]["caf"]
     locs = cfg["locataires"]
+    annees = list(range(cfg["annee_debut"], cfg["annee_fin"] + 1))
     ws = wb.create_sheet("Bilan")
     ws.sheet_view.showGridLines = False
     ws.sheet_properties.tabColor = CHARTE.onglet_systeme
@@ -1124,55 +1136,91 @@ def construire_bilan(wb: Workbook, cfg: dict) -> None:
     if caf:
         cols += [("dont CAF", 13), ("dont locataire", 14)]
     cols += [("Solde", 14), ("Taux recouvrement", 16)]
-
-    for i, (titre, w) in enumerate(cols, 1):
-        style_entete(ws.cell(1, i, titre))
-        ws.column_dimensions[get_column_letter(i)].width = w
-    regler_hauteur_entete(ws, 1)
-
     keys = ["nom", "du", "recu"] + (["caf", "loc"] if caf else []) + ["solde", "taux"]
     B = {k: get_column_letter(i) for i, k in enumerate(keys, 1)}
     pos = {k: i for i, k in enumerate(keys, 1)}
-
-    for r, loc in enumerate(locs, start=2):
-        nomc = f"${B['nom']}{r}"
-        ecrire_texte(ws, r, 1, _identite(loc))
-        ws.cell(r, pos["du"], f"=SUMIFS(Suivi_TotalDu,Suivi_Locataire,{nomc})")
-        ws.cell(r, pos["recu"], f"=SUMIFS(Suivi_TotalRecu,Suivi_Locataire,{nomc})")
-        if caf:
-            ws.cell(r, pos["caf"], f"=SUMIFS(Suivi_CAFRecue,Suivi_Locataire,{nomc})")
-            ws.cell(r, pos["loc"], f"=SUMIFS(Suivi_LocRecu,Suivi_Locataire,{nomc})")
-        ws.cell(r, pos["solde"], f"={B['recu']}{r}-{B['du']}{r}")
-        ws.cell(r, pos["taux"], f'=IFERROR({B["recu"]}{r}/{B["du"]}{r},"")')
-
-    der = len(locs) + 1
-    total_r = der + 1
-    ws.cell(total_r, 1, "TOTAL").font = Font(bold=True)
-    for k in (["du", "recu"] + (["caf", "loc"] if caf else []) + ["solde"]):
-        col = B[k]
-        c = ws.cell(total_r, pos[k], f"=SUM({col}2:{col}{der})")
-        c.font = Font(bold=True)
-    c = ws.cell(total_r, pos["taux"], f'=IFERROR({B["recu"]}{total_r}/{B["du"]}{total_r},"")')
-    c.font = Font(bold=True)
-
+    for i, (_titre, w) in enumerate(cols, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
     fill_total = PatternFill("solid", fgColor=CHARTE.calc)
-    for r in range(2, total_r + 1):
-        for k in keys:
-            cell = ws.cell(r, pos[k])
-            if k == "taux":
-                cell.number_format = FMT_PCT
-            elif k != "nom":
-                cell.number_format = FMT_EURO
-            cell.border = BORDURE
-            if r == total_r:
-                cell.fill = fill_total
 
-    plage_solde = f"{B['solde']}2:{B['solde']}{der}"
-    ws.conditional_formatting.add(plage_solde, FormulaRule(
-        formula=[f"${B['solde']}2<-0.005"], fill=_fill_cf(CHARTE.partiel)))
-    ws.conditional_formatting.add(plage_solde, FormulaRule(
-        formula=[f"${B['solde']}2>0.005"], fill=_fill_cf(CHARTE.trop)))
+    def bloc(r0, titre, entete_col1, lignes, cle_col1, extra_crit=""):
+        """En-tête + lignes SUMIFS + ligne TOTAL. `lignes` = liste de
+        (valeur_col1, est_nombre) ; le critère SUMIFS de chaque ligne référence sa
+        propre colonne 1 ($A) via `cle_col1` (la valeur EST le critère), plus
+        `extra_crit` (ex. filtre année fixe). Renvoie (hdr, first, last, total)."""
+        style_titre(ws.cell(r0, 1, titre), TITRE_H2)
+        hdr = r0 + 1
+        for i, t in enumerate([entete_col1] + [c[0] for c in cols[1:]], 1):
+            style_entete(ws.cell(hdr, i, t))
+        regler_hauteur_entete(ws, hdr)
+        first = hdr + 1
+        r = first
+        for valeur, est_nb in lignes:
+            if est_nb:
+                ws.cell(r, 1, valeur).number_format = "0"
+            else:
+                ecrire_texte(ws, r, 1, valeur)
+            crit = f"{cle_col1},$A{r}{extra_crit}"
+            ws.cell(r, pos["du"], f"=SUMIFS(Suivi_TotalDu,{crit})")
+            ws.cell(r, pos["recu"], f"=SUMIFS(Suivi_TotalRecu,{crit})")
+            if caf:
+                ws.cell(r, pos["caf"], f"=SUMIFS(Suivi_CAFRecue,{crit})")
+                ws.cell(r, pos["loc"], f"=SUMIFS(Suivi_LocRecu,{crit})")
+            ws.cell(r, pos["solde"], f"={B['recu']}{r}-{B['du']}{r}")
+            ws.cell(r, pos["taux"], f'=IFERROR({B["recu"]}{r}/{B["du"]}{r},"")')
+            r += 1
+        last = r - 1
+        total = r
+        ws.cell(total, 1, "TOTAL").font = Font(bold=True)
+        for k in (["du", "recu"] + (["caf", "loc"] if caf else []) + ["solde"]):
+            col = B[k]
+            ws.cell(total, pos[k], f"=SUM({col}{first}:{col}{last})").font = Font(bold=True)
+        ws.cell(total, pos["taux"],
+                f'=IFERROR({B["recu"]}{total}/{B["du"]}{total},"")').font = Font(bold=True)
+        for rr in range(first, total + 1):
+            for k in keys:
+                cell = ws.cell(rr, pos[k])
+                if k == "taux":
+                    cell.number_format = FMT_PCT
+                elif k != "nom":
+                    cell.number_format = FMT_EURO
+                cell.border = BORDURE
+                if rr == total:
+                    cell.fill = fill_total
+        plage = f"{B['solde']}{first}:{B['solde']}{last}"
+        ws.conditional_formatting.add(plage, FormulaRule(
+            formula=[f"${B['solde']}{first}<-0.005"], fill=_fill_cf(CHARTE.partiel)))
+        ws.conditional_formatting.add(plage, FormulaRule(
+            formula=[f"${B['solde']}{first}>0.005"], fill=_fill_cf(CHARTE.trop)))
+        return hdr, first, last, total
+
+    style_titre(ws.cell(1, 1, "BILAN"))
+
+    # 1) Évolution annuelle (portefeuille) : une ligne par année.
+    a_hdr, a_first, a_last, a_total = bloc(
+        3, "Évolution annuelle (portefeuille)", "Année",
+        [(an, True) for an in annees], "Suivi_Annee")
+
+    # 2) Synthèse par locataire (toutes années) : la table historique.
+    g_hdr, g_first, g_last, g_total = bloc(
+        a_total + 3, "Synthèse par locataire (toutes années)", "Locataire",
+        [(_identite(loc), False) for loc in locs], "Suivi_Locataire")
+
+    # 3) Détail par année : un bloc-table locataire par année de la période.
+    r0 = g_total + 3
+    for an in annees:
+        _h, _f, _l, t = bloc(
+            r0, f"Détail {an}", "Locataire",
+            [(_identite(loc), False) for loc in locs], "Suivi_Locataire",
+            extra_crit=f",Suivi_Annee,{an}")
+        r0 = t + 3
+
     ws.freeze_panes = "A2"
+    return {
+        "caf": caf, "col": B, "pos": pos,
+        "global": {"hdr": g_hdr, "first": g_first, "last": g_last, "total": g_total},
+        "annuel": {"hdr": a_hdr, "first": a_first, "last": a_last, "total": a_total},
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1256,9 +1304,15 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
             cb = ws.cell(r, 4, "=" + base_ref)
             cb.number_format = FMT_EURO
             cb.border = BORDURE
-            capp = ws.cell(r, 5, f'=IFERROR($D{r}*SUMIFS(Irl_Valeur,Irl_Annee,$B{r},'
-                                 f'Irl_Trim,$C{r})/SUMIFS(Irl_Valeur,Irl_Annee,{a0},'
-                                 f'Irl_Trim,$C{r}),$D{r})')
+            # Numérateur = indice de l'année courante ; dénominateur = indice de
+            # l'année de référence (a0). Un indice non publié rend son SUMIFS nul :
+            # on retombe alors sur le loyer de base (pas de révision), au lieu de
+            # laisser 0/x=0 écraser le loyer. IFERROR garde la division par zéro
+            # (réf. absente) ; le IF garde le numérateur absent (année non publiée).
+            num = f'SUMIFS(Irl_Valeur,Irl_Annee,$B{r},Irl_Trim,$C{r})'
+            den = f'SUMIFS(Irl_Valeur,Irl_Annee,{a0},Irl_Trim,$C{r})'
+            capp = ws.cell(r, 5,
+                           f'=IF({num}=0,$D{r},IFERROR($D{r}*{num}/{den},$D{r}))')
             capp.number_format = FMT_EURO
             capp.border = BORDURE
             cvar = ws.cell(r, 6, f'=IFERROR($E{r}/$D{r}-1,"")')
@@ -1282,55 +1336,105 @@ def construire_irl(wb: Workbook, cfg: dict, ref_loc: dict, saisies_irl: dict) ->
 # Onglet Tableau de bord (graphiques)
 # --------------------------------------------------------------------------- #
 
-def construire_tableau_bord(wb: Workbook, cfg: dict) -> None:
+def construire_tableau_bord(wb: Workbook, cfg: dict, layout: dict) -> None:
     if not cfg["modules"].get("tableau_bord", True) or "Bilan" not in wb.sheetnames:
         return
-    caf = cfg["modules"]["caf"]
-    n = len(cfg["locataires"])
-    if n == 0:
+    if len(cfg["locataires"]) == 0:
         return
-    fin = n + 1  # dernière ligne locataire dans Bilan (ligne 1 = en-têtes)
-
-    keys = ["nom", "du", "recu"] + (["caf", "loc"] if caf else []) + ["solde", "taux"]
-    pos = {k: i for i, k in enumerate(keys, 1)}
+    caf = layout["caf"]
+    B, pos = layout["col"], layout["pos"]
+    glob, ann = layout["global"], layout["annuel"]
     bilan = wb["Bilan"]
 
     ws = wb.create_sheet("Tableau de bord")
     ws.sheet_view.showGridLines = False
     ws.sheet_properties.tabColor = CHARTE.onglet_systeme
     style_titre(ws.cell(1, 1, "TABLEAU DE BORD"))
+    ws.cell(2, 1, "Synthèse visuelle, calculée à partir de vos saisies dans les feuilles "
+            "locataire. Les chiffres se mettent à jour automatiquement.").font = Font(
+        italic=True, color=CHARTE.onglet_donnees)
 
-    cats = Reference(bilan, min_col=pos["nom"], min_row=2, max_row=fin)
+    # --- Cartes de synthèse (lues sur la ligne TOTAL de la synthèse globale) ---
+    # Colonnes des cartes élargies : un total comme « 123 456 € » en gros doit tenir
+    # sans déborder en « ### ». Sans incidence sur les graphes (largeur fixée en cm).
+    for c in range(2, 14):
+        ws.column_dimensions[get_column_letter(c)].width = 12
+    fmt_eur_kpi = '#,##0\\ "€"'           # KPI : pas de centimes (lisibilité)
+    gt = glob["total"]
+    kpis = [("Total dû", f"='Bilan'!{B['du']}{gt}", fmt_eur_kpi),
+            ("Total reçu", f"='Bilan'!{B['recu']}{gt}", fmt_eur_kpi),
+            ("Solde (reçu − dû)", f"='Bilan'!{B['solde']}{gt}", fmt_eur_kpi),
+            ("Taux de recouvrement", f"='Bilan'!{B['taux']}{gt}", FMT_PCT)]
+    fill_kpi = PatternFill("solid", fgColor=CHARTE.calc)
+    for i, (lab, frm, fmt) in enumerate(kpis):
+        c0 = 2 + i * 3                      # cartes ancrées en B, E, H, K (2 col. chacune)
+        for rr in (4, 5):
+            ws.merge_cells(start_row=rr, start_column=c0, end_row=rr, end_column=c0 + 1)
+            for cc in range(c0, c0 + 2):
+                cell = ws.cell(rr, cc)
+                cell.fill = fill_kpi
+                cell.border = BORDURE
+        lc = ws.cell(4, c0, lab)
+        lc.font = Font(bold=True, size=10, color=CHARTE.onglet_donnees)
+        vc = ws.cell(5, c0, frm)
+        vc.font = Font(bold=True, size=16, color=CHARTE.primaire)
+        vc.number_format = fmt
+    ws.row_dimensions[5].height = 26
+
+    def graphe(g, ancre_row, caption):
+        cap = ws.cell(ancre_row - 1, 2, caption)
+        cap.font = Font(italic=True, color=CHARTE.onglet_donnees)
+        g.height, g.width = 8, 16
+        g.legend.position = "b"
+        ws.add_chart(g, f"B{ancre_row}")
+
+    cats_loc = Reference(bilan, min_col=pos["nom"], min_row=glob["first"], max_row=glob["last"])
 
     g1 = BarChart()
     g1.type = "col"
     g1.title = "Loyers : dû vs reçu par locataire"
-    g1.height, g1.width = 8, 16
-    d1 = Reference(bilan, min_col=pos["du"], max_col=pos["recu"], min_row=1, max_row=fin)
+    g1.y_axis.title = "€"
+    d1 = Reference(bilan, min_col=pos["du"], max_col=pos["recu"],
+                   min_row=glob["hdr"], max_row=glob["last"])
     g1.add_data(d1, titles_from_data=True)
-    g1.set_categories(cats)
-    ws.add_chart(g1, "B3")
+    g1.set_categories(cats_loc)
+    graphe(g1, 8, "Pour chaque locataire : montant attendu (dû) face au montant réellement "
+                  "encaissé, sur toute la période.")
+
+    gA = BarChart()
+    gA.type = "col"
+    gA.title = "Évolution annuelle : dû vs reçu"
+    gA.y_axis.title = "€"
+    dA = Reference(bilan, min_col=pos["du"], max_col=pos["recu"],
+                   min_row=ann["hdr"], max_row=ann["last"])
+    gA.add_data(dA, titles_from_data=True)
+    gA.set_categories(Reference(bilan, min_col=1, min_row=ann["first"], max_row=ann["last"]))
+    graphe(gA, 26, "Total dû et total encaissé, année par année (tous locataires confondus). "
+                   "Un écart croissant signale des impayés qui s'accumulent.")
 
     g2 = BarChart()
     g2.type = "bar"
     g2.title = "Taux de recouvrement par locataire"
-    g2.height, g2.width = 8, 16
-    d2 = Reference(bilan, min_col=pos["taux"], min_row=1, max_row=fin)
+    g2.x_axis.title = "% encaissé"
+    d2 = Reference(bilan, min_col=pos["taux"], min_row=glob["hdr"], max_row=glob["last"])
     g2.add_data(d2, titles_from_data=True)
-    g2.set_categories(cats)
-    ws.add_chart(g2, "B20")
+    g2.set_categories(cats_loc)
+    graphe(g2, 44, "Part des loyers encaissée par locataire. 100 % = tout payé ; en dessous, "
+                   "il reste des sommes à percevoir.")
 
     if caf:
         g3 = BarChart()
         g3.type = "col"
         g3.grouping = "stacked"
         g3.overlap = 100
-        g3.title = "Répartition encaissé : CAF / locataire"
-        g3.height, g3.width = 8, 16
-        d3 = Reference(bilan, min_col=pos["caf"], max_col=pos["loc"], min_row=1, max_row=fin)
+        g3.title = "Répartition de l'encaissé : CAF / locataire"
+        g3.y_axis.title = "€"
+        d3 = Reference(bilan, min_col=pos["caf"], max_col=pos["loc"],
+                       min_row=glob["hdr"], max_row=glob["last"])
         g3.add_data(d3, titles_from_data=True)
-        g3.set_categories(cats)
-        ws.add_chart(g3, "B37")
+        g3.set_categories(cats_loc)
+        graphe(g3, 62, "Origine de l'argent reçu : part versée par la CAF (tiers payant) "
+                       "et part payée directement par le locataire.")
 
 
 # --------------------------------------------------------------------------- #
@@ -1716,7 +1820,7 @@ def recolter_saisies(wb) -> dict:
         if nom_feuille in FEUILLES_SYSTEME:
             continue
         ws = wb[nom_feuille]
-        # Repérer la ligne d'en-tête (celle qui contient « Mois »).
+        # Repérer la ligne d'en-tête (celle qui contient « Mois » ET « Année »).
         ligne_ent = None
         for r in range(1, min(ws.max_row, 12) + 1):
             valeurs = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
@@ -1819,7 +1923,7 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     if cfg.get("demo") and not saisies:
         saisies = _saisies_demo(cfg)
 
-    # m7 : signaler les saisies orphelines (locataire renommé/supprimé).
+    # Signaler les saisies orphelines (locataire renommé/supprimé) : non réinjectées.
     identites = {_identite(loc) for loc in cfg["locataires"]}
     orphelins = sorted({nom for (nom, _, _) in saisies if nom not in identites})
     if orphelins:
@@ -1834,8 +1938,8 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     ref_loc = construire_locataires(wb, cfg)
     feuilles = construire_feuilles_locataires(wb, cfg, ref_loc, saisies)
     construire_donnees(wb, cfg, feuilles)
-    construire_bilan(wb, cfg)
-    construire_tableau_bord(wb, cfg)
+    layout_bilan = construire_bilan(wb, cfg)
+    construire_tableau_bord(wb, cfg, layout_bilan)
     construire_regularisation(wb, cfg, saisies_reg)
     construire_irl(wb, cfg, ref_loc, saisies_irl)
     if cfg["modules"].get("documents"):
@@ -1872,9 +1976,11 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
 
     sortie.parent.mkdir(parents=True, exist_ok=True)
     # Sauvegarde de secours avant d'écraser (récupération en cas de couac).
+    # Nom horodaté : on conserve chaque sauvegarde au lieu d'écraser la précédente.
     if sortie.is_file():
         try:
-            shutil.copy2(sortie, sortie.with_name(sortie.stem + ".bak.xlsx"))
+            horo = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(sortie, sortie.with_name(f"{sortie.stem}.bak-{horo}.xlsx"))
         except OSError:
             pass
     wb.save(sortie)

@@ -581,7 +581,7 @@ class Application(tk.Tk):
         try:
             return int(var.get())
         except (tk.TclError, ValueError):
-            raise ValueError(f"{label} invalide (saisissez une année).")
+            raise ValueError(f"{label} invalide (saisissez une année).") from None
 
     def _modules(self) -> dict:
         return {"mode_charges": MODE_KEY.get(self.var_mode.get(), "comprises"),

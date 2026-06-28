@@ -167,7 +167,7 @@ def main() -> int:
         {"nom": "Bea", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}),
         fb, orphelins_out=orph)
     assert "Ana" in orph, orph
-    assert (tmp / "bak.bak.xlsx").is_file(), "sauvegarde .bak manquante"
+    assert list(tmp.glob("bak.bak-*.xlsx")), "sauvegarde .bak horodatée manquante"
 
     # Prorata : entrée le 6 janvier (31 jours) -> facteur *26/31 dans le loyer dû.
     fp = tmp / "prorata.xlsx"
@@ -284,6 +284,9 @@ def main() -> int:
     h_loy = next(r for r in range(1, irl.max_row + 1)
                  if irl.cell(r, 5).value == "Loyer applicable (€)")
     appfx = irl.cell(h_loy + 1, 5).value
+    # Indice d'année non publié (numérateur SUMIFS = 0) => retour au loyer de base,
+    # pas un écrasement à 0. Le garde IF(...=0,$D...) doit précéder la division.
+    assert appfx.startswith("=IF(SUMIFS(Irl_Valeur") and "=0,$D" in appfx, appfx
     assert "IFERROR" in appfx and "SUMIFS(Irl_Valeur" in appfx, appfx
     for nom_plage in ("LoyerAn_Loc", "LoyerAn_Annee", "LoyerAn_Valeur"):
         assert nom_plage in wb.defined_names, (nom_plage, list(wb.defined_names))
@@ -417,6 +420,17 @@ def main() -> int:
     bil = wd9["Bilan"]
     rtot = next((r for r in range(1, bil.max_row + 1) if bil.cell(r, 1).value == "TOTAL"), None)
     assert rtot and _f6(bil.cell(rtot, 2)) == calc6, ("Bilan TOTAL non surligné", rtot)
+
+    # 11bis) Bilan par année : bloc d'évolution annuelle + un bloc détail par année.
+    titres_bilan = {bil.cell(r, 1).value for r in range(1, bil.max_row + 1)}
+    assert "Évolution annuelle (portefeuille)" in titres_bilan, "Bloc évolution annuelle absent"
+    for an in (2024, 2025):                       # période de f1 (cf. config en tête)
+        assert f"Détail {an}" in titres_bilan, ("Bloc détail année absent", an)
+    # Le filtrage annuel passe bien par un critère Suivi_Annee (et non une seule table globale).
+    formules = [bil.cell(r, c).value for r in range(1, bil.max_row + 1)
+                for c in range(1, bil.max_column + 1)]
+    assert any(isinstance(f, str) and "Suivi_Annee" in f for f in formules), \
+        "Aucun SUMIFS filtré par Suivi_Annee dans le Bilan"
     locsheet = wd9["Appt 1 - Alice"]
     rann = next((r for r in range(1, locsheet.max_row + 1)
                  if str(locsheet.cell(r, 3).value or "").startswith("Total ")), None)

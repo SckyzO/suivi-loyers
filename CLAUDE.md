@@ -85,15 +85,19 @@ Flux de données clé :
 
 ## Workflow de fin de modification
 
-Lancer **`make`** après chaque modification. Cela enchaîne : build de l'image, génération des
-classeurs d'exemple, `tests/smoke.py`, puis sync (code vers le dossier Windows, `.xlsx` vers
-`~/Downloads`). Tout passe par Docker, rien d'installé en local.
+Lancer **`make`** après chaque modification. Cela enchaîne : build de l'image, **lint ruff**,
+génération des classeurs d'exemple, `tests/smoke.py`, puis sync (code vers le dossier Windows,
+`.xlsx` vers `~/Downloads`). Tout passe par Docker, rien d'installé en local.
 
 ```bash
-make            # build + gen + test + sync (workflow complet)
+make            # build + lint + gen + test + sync (workflow complet)
+make lint       # lint ruff seul (bugs/style ; config dans ruff.toml)
 make test       # smoke test seul (structure, modularité, préservation)
 make sync       # code -> dossier Windows, xlsx -> ~/Downloads
 ```
+
+Le lint (`ruff.toml`) volontairement n'impose ni la longueur de ligne (E501) ni le tri d'imports
+(isort) : wrapping et regroupement sont manuels. `interface.py` tolère les one-liners `;` (E702).
 
 Le smoke test (`tests/smoke.py`) valide systématiquement : modularité (pas de colonne CAF en
 config minimale), période d'activité (rotation), et reprise des saisies après ajout d'un
@@ -117,11 +121,21 @@ et avertissement explicite si la config vient d'une version **plus récente** qu
 
 ## Modules (tous implémentés)
 
-`documents` (`construire_document`), `tableau_bord` (`construire_tableau_bord` : graphiques
-openpyxl basés sur le Bilan), `regularisation_charges` (`construire_regularisation` : filtre
-locataire + pré-remplissage = provisions en mode comprises) et `irl` (`construire_irl`). Les
-saisies propres à ces onglets sont préservées par `recolter_regularisation` et `recolter_irl`,
-en plus de `recolter_saisies` (mensuel).
+`documents` (`construire_document`), `tableau_bord` (`construire_tableau_bord` : cartes de
+synthèse KPI + graphiques openpyxl légendés/commentés basés sur le Bilan),
+`regularisation_charges` (`construire_regularisation` : filtre locataire + pré-remplissage =
+provisions en mode comprises) et `irl` (`construire_irl`). Les saisies propres à ces onglets
+sont préservées par `recolter_regularisation` et `recolter_irl`, en plus de `recolter_saisies`
+(mensuel).
+
+- **Bilan structuré** (`construire_bilan`) : titre + **évolution annuelle** (1 ligne/année,
+  portefeuille) + **synthèse par locataire** (toutes années) + **un bloc détail par année**.
+  Tous les blocs partagent le helper interne `bloc()` (en-tête + lignes `SUMIFS` + TOTAL surligné
+  `calc` + mise en forme conditionnelle sur le Solde). Le filtrage par année passe par un critère
+  `Suivi_Annee` (jamais une table figée). `construire_bilan` **renvoie les coordonnées** des blocs
+  (`global`/`annuel` : hdr/first/last/total) que `construire_tableau_bord` consomme — pas de
+  positions codées en dur entre les deux. Le tableau de bord lit le TOTAL global pour ses cartes
+  KPI et ajoute un graphe « évolution annuelle » en plus des graphes par locataire.
 
 - **IRL répercutée mois par mois** (`construire_irl`, Section 2 « Loyer applicable par année ») :
   modèle fermé `loyer(Y) = loyer_base × IRL_Tref(Y) / IRL_Tref(A0)`, où `A0` = 1ʳᵉ année active du
