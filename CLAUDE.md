@@ -146,14 +146,14 @@ sont préservées par `recolter_regularisation` et `recolter_irl`, en plus de `r
   affiché en JJ/MM/AAAA dans le référentiel.
 
 - **Style des graphes du tableau de bord** (clé config `style_excel`, défaut `True`, case
-  « Générer pour Microsoft Excel » dans les deux UIs) : openpyxl ne sait pas écrire les parties
-  `chartStyle`/`colorStyle` Microsoft (le « Style 1 » du pinceau Excel). Quand `style_excel` est
-  actif, `generer_workbook` post-traite le `.xlsx` (`_appliquer_style_excel`, surgery zip) : il
-  injecte `xl/charts/style{N}.xml` + `colors{N}.xml` (templates dans `chart_style.py`), les
-  relations `chart{N}.xml.rels` et les `Override` de content-type → rendu natif Excel. Les séries
-  sont alors laissées **sans remplissage explicite** (le chartStyle pilote les couleurs). Quand
-  `style_excel` est faux, repli sur l'embellissement openpyxl natif (séries aux couleurs du thème
-  via `graphe()`), portable LibreOffice. `chart_style.py` est embarqué (Dockerfile + SRC Makefile).
+  « Générer pour Microsoft Excel » dans les deux UIs) : les couleurs de séries sont posées
+  **explicitement via `spPr`** dans `graphe()` (`GraphicalProperties(solidFill=...)`) — seule
+  méthode fiable. Les parties `chartStyle`/`colorStyle` Microsoft (le « Style 1 » du pinceau)
+  **ne marchent PAS** sur les graphes openpyxl : ce sont des graphes au format « ancien » et Excel
+  ignore ces parties (Microsoft Q&A « style1.xml/color1.xml not recognized for older charts »).
+  `style_excel=True` → palette Office (`4472C4`/`ED7D31`/… : look Excel bleu/orange) ; `False` →
+  couleurs du thème du classeur (CHARTE). `spPr` est honoré par Excel ET LibreOffice (vérifiable
+  au rendu). Ne pas réintroduire d'injection de parties chartStyle (impasse documentée).
 
 - **Bilan structuré** (`construire_bilan`) : titre + **évolution annuelle** (1 ligne/année,
   portefeuille) + **synthèse par locataire** (toutes années) + **un bloc détail par année**.

@@ -23,7 +23,7 @@ EXEMPLES := exemples
 USERFLAG := --user $(shell id -u):$(shell id -g)
 
 # Fichiers source synchronisés côté Windows (pour builder l'.exe via build.bat).
-SRC := generer_suivi_loyers.py chart_style.py interface.py build.bat requirements.txt \
+SRC := generer_suivi_loyers.py interface.py build.bat requirements.txt \
        interface_flet.py build-flet.bat requirements-flet.txt \
        Dockerfile docker-compose.yml Makefile README.md CLAUDE.md .gitignore
 
