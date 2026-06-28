@@ -15,11 +15,8 @@ bailleur:
   adresse: "12 rue des Lilas, 35000 Rennes"
   tel: "06 12 34 56 78"
   email: "contact@les-tilleuls.fr"
-  # Champs facultatifs repris sur les documents (avis d'échéance, mise en demeure).
-  mode_paiement: "Virement bancaire"      # imprimé sous l'avis d'échéance
+  # IBAN du bailleur (compte de réception), imprimé sous l'avis / la mise en demeure.
   iban: "FR76 3000 1000 0100 0000 0000 123"
-  jour_echeance: "5"                       # « à régler avant le 5 <mois> » sur l'avis
-  date_bail: "2023-06-01"                  # référence du bail sur la mise en demeure
 
 periode:
   annee_debut: 2024
@@ -49,6 +46,10 @@ locataires:
     date_sortie: 2025-06-15   # mois de sortie partiel -> prorata
     caution_rendue: false
     observation: "Loyer impayé"
+    # Champs propres au bail (repris sur les documents de CE locataire).
+    date_bail: "2023-12-20"
+    mode_paiement: "Virement bancaire"
+    jour_echeance: "5"
 
   # Nouveau locataire dans le MÊME appartement (test du nom d'onglet « Appt A1 - Nom »).
   - nom: "Nguyen"
@@ -72,3 +73,6 @@ locataires:
     part_caf: 0
     depot_garantie: 520
     date_entree: 2024-03-15
+    date_bail: "2024-03-10"
+    mode_paiement: "Prélèvement automatique"
+    jour_echeance: "1"

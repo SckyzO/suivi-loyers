@@ -324,6 +324,15 @@ class DialogueLocataire(tk.Toplevel):
         libelle("Observation (motif de départ)")
         self.cb_observation = combo("observation", OBSERVATIONS, defaut=v.get("observation", ""))
 
+        # Champs propres au bail, repris sur les documents de ce locataire.
+        section("Documents (bail)")
+        libelle("Date du bail")
+        self.date_bail = ChampDate(self, v.get("date_bail", ""))
+        self.date_bail.grid(row=ligne, column=1, sticky="w", padx=(0, 10), pady=3)
+        ligne += 1
+        libelle("Mode de paiement"); entree("mode_paiement")
+        libelle("Jour d'échéance (ex. 5)"); entree("jour_echeance")
+
         ttk.Label(self, text="Adresse : choisissez-en une déjà saisie ou tapez-en une nouvelle.",
                   foreground=muted, wraplength=360, justify="left").grid(
             row=ligne, column=0, columnspan=2, padx=10, pady=(10, 4), sticky="w")
@@ -358,6 +367,7 @@ class DialogueLocataire(tk.Toplevel):
                 val = var.get().strip()
                 data[cle] = _parse_nombre(val) if cle in self._champs_num else val
             data["date_entree"] = self.date_entree.get()
+            data["date_bail"] = self.date_bail.get()
             if self.var_parti.get():
                 data["date_sortie"] = self.date_sortie.get()
                 data["caution_rendue"] = bool(self.var_caution.get()) if self._depot else False
@@ -475,10 +485,7 @@ class Application(tk.Tk):
         self.var_adresse = tk.StringVar()
         self.var_tel = tk.StringVar()
         self.var_email = tk.StringVar()
-        self.var_mode_paiement = tk.StringVar()
         self.var_iban = tk.StringVar()
-        self.var_jour_echeance = tk.StringVar()
-        self.var_date_bail = tk.StringVar()
         self.var_debut = tk.IntVar(value=ANNEE)
         self.var_fin = tk.IntVar(value=ANNEE + 2)
         self.var_caf = tk.BooleanVar(value=True)
@@ -516,11 +523,8 @@ class Application(tk.Tk):
         ligne(bf, 4, "Adresse", ttk.Entry(bf, textvariable=self.var_adresse))
         ligne(bf, 5, "Téléphone", ttk.Entry(bf, textvariable=self.var_tel))
         ligne(bf, 6, "E-mail", ttk.Entry(bf, textvariable=self.var_email))
-        # Champs facultatifs repris sur les documents (avis d'échéance, mise en demeure).
-        ligne(bf, 7, "Mode de paiement", ttk.Entry(bf, textvariable=self.var_mode_paiement))
-        ligne(bf, 8, "IBAN", ttk.Entry(bf, textvariable=self.var_iban))
-        ligne(bf, 9, "Jour d'échéance", ttk.Entry(bf, textvariable=self.var_jour_echeance))
-        ligne(bf, 10, "Date du bail", ttk.Entry(bf, textvariable=self.var_date_bail))
+        # IBAN du bailleur (compte de réception) repris sur les documents.
+        ligne(bf, 7, "IBAN", ttk.Entry(bf, textvariable=self.var_iban))
         self._maj_sci()
 
         # -- Contenu du classeur (colonne 1) --
@@ -656,10 +660,7 @@ class Application(tk.Tk):
                          "sci": self.var_sci.get(), "sci_nom": self.var_sci_nom.get().strip(),
                          "adresse": self.var_adresse.get(), "tel": self.var_tel.get(),
                          "email": self.var_email.get(),
-                         "mode_paiement": self.var_mode_paiement.get().strip(),
-                         "iban": self.var_iban.get().strip(),
-                         "jour_echeance": self.var_jour_echeance.get().strip(),
-                         "date_bail": self.var_date_bail.get().strip()},
+                         "iban": self.var_iban.get().strip()},
             "periode": {"annee_debut": self._lire_annee(self.var_debut, "Année de début"),
                         "annee_fin": self._lire_annee(self.var_fin, "Année de fin")},
             "modules": self._modules(),
@@ -678,10 +679,7 @@ class Application(tk.Tk):
         self.var_adresse.set(b.get("adresse", ""))
         self.var_tel.set(b.get("tel", ""))
         self.var_email.set(b.get("email", ""))
-        self.var_mode_paiement.set(b.get("mode_paiement", ""))
         self.var_iban.set(b.get("iban", ""))
-        self.var_jour_echeance.set(str(b.get("jour_echeance", "") or ""))
-        self.var_date_bail.set(b.get("date_bail", ""))
         p = cfg.get("periode", {})
         self.var_debut.set(int(p.get("annee_debut", ANNEE)))
         self.var_fin.set(int(p.get("annee_fin", ANNEE)))

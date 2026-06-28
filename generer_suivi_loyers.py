@@ -795,6 +795,11 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     if depot:
         cols.append(("caution", "Caution rendue"))
     cols.append(("observation", "Observation (motif de départ)"))
+    # Champs propres au bail, repris sur les documents (lus par VLOOKUP).
+    docs = mod["documents"]
+    if docs:
+        cols += [("date_bail", "Date du bail"), ("mode_paiement", "Mode de paiement"),
+                 ("jour_echeance", "Jour d'échéance")]
 
     idx = {champ: i + 1 for i, (champ, _) in enumerate(cols)}
     lettre = {champ: get_column_letter(i + 1) for i, (champ, _) in enumerate(cols)}
@@ -806,7 +811,8 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
     largeurs = {"locataire": 22, "type_bien": 14, "identifiant": 20, "adresse": 28,
                 "loyer_nu": 13, "charges": 13, "loyer_total": 14, "part_caf": 16,
                 "reste": 16, "depot": 16, "date_entree": 13, "date_sortie": 13,
-                "caution": 14, "observation": 28}
+                "caution": 14, "observation": 28, "date_bail": 14, "mode_paiement": 18,
+                "jour_echeance": 14}
     for champ, lettre_col in lettre.items():
         ws.column_dimensions[lettre_col].width = largeurs.get(champ, 14)
 
@@ -838,6 +844,15 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
             ws.cell(r, idx["caution"], "Oui" if loc.get("caution_rendue") else "Non")
         if a_sortie and loc.get("observation"):
             ecrire_texte(ws, r, idx["observation"], loc.get("observation"))
+        if docs:
+            db = str(loc.get("date_bail") or "").strip()
+            try:   # ISO -> JJ/MM/AAAA pour l'affichage (sinon laissé tel quel)
+                db = dt.date.fromisoformat(db).strftime("%d/%m/%Y") if db else ""
+            except ValueError:
+                pass
+            ecrire_texte(ws, r, idx["date_bail"], db)
+            ecrire_texte(ws, r, idx["mode_paiement"], loc.get("mode_paiement", ""))
+            ecrire_texte(ws, r, idx["jour_echeance"], str(loc.get("jour_echeance", "") or ""))
 
     derniere = len(cfg["locataires"]) + 1
 
@@ -845,7 +860,8 @@ def construire_locataires(wb: Workbook, cfg: dict) -> dict:
                      "part_caf": FMT_EURO, "reste": FMT_EURO, "depot": FMT_EURO,
                      "date_entree": FMT_DATE, "date_sortie": FMT_DATE}
     saisie_champs = {"locataire", "identifiant", "adresse", "type_bien", "loyer_nu", "charges",
-                     "part_caf", "depot", "date_entree", "date_sortie", "caution", "observation"}
+                     "part_caf", "depot", "date_entree", "date_sortie", "caution", "observation",
+                     "date_bail", "mode_paiement", "jour_echeance"}
     for r in range(2, derniere + 1):
         for champ, i in idx.items():
             cell = ws.cell(r, i)
@@ -1479,18 +1495,11 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     spec = specs[kind]
 
     b = cfg["bailleur"]
-    # Champs optionnels (libres) ; assainis quand ils sont injectés dans une formule.
-    def _form_safe(cle: str) -> str:
-        return str(b.get(cle) or "").strip().replace('"', "")
-    iban = str(b.get("iban") or "").strip()
-    mode_paiement = str(b.get("mode_paiement") or "").strip()
-    jour_echeance = _form_safe("jour_echeance")
-    # date_bail : affichée au format français si saisie en ISO, sinon telle quelle.
-    _db = _form_safe("date_bail")
-    try:
-        date_bail = dt.date.fromisoformat(_db).strftime("%d/%m/%Y") if _db else ""
-    except ValueError:
-        date_bail = _db
+    iban = str(b.get("iban") or "").strip()   # seul champ document au niveau bailleur
+    # mode_paiement / jour_echeance / date_bail sont propres au locataire : lus par
+    # VLOOKUP sur le locataire selectionne (voir vl_mode / vl_jour / vl_bail plus bas).
+    any_mode = any(str(loc.get("mode_paiement") or "").strip()
+                   for loc in cfg["locataires"])
 
     ws = wb.create_sheet(spec["feuille"])
     ws.sheet_view.showGridLines = False
@@ -1530,6 +1539,12 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
 
     def vlook(field: str) -> str:
         return f'IFERROR(VLOOKUP($C$4,RefLocataires,{idx[field]},FALSE),"")'
+
+    # Champs document propres au locataire (présents dans le référentiel quand le
+    # module documents est actif) : lus dynamiquement selon le locataire sélectionné.
+    vl_mode = vlook("mode_paiement") if "mode_paiement" in idx else '""'
+    vl_jour = vlook("jour_echeance") if "jour_echeance" in idx else '""'
+    vl_bail = vlook("date_bail") if "date_bail" in idx else '""'
 
     # Bloc bailleur (gauche) et locataire (droite).
     ws["B7"] = "Le bailleur :"
@@ -1649,10 +1664,9 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
         montant_cell = cellule["du"]
         base_txt = (f'"Madame, Monsieur, veuillez trouver le montant de votre loyer pour la '
                     f'période de "&$C$5&" "&$E$5&", soit "&FIXED({montant_cell},2,TRUE)&" €"')
-        if jour_echeance:
-            ech = f'&", à régler avant le {jour_echeance} "&$C$5&" "&$E$5&"."'
-        else:
-            ech = '&", à régler sous 8 jours."'
+        # Echeance selon le jour du bail du locataire (vide => delai par defaut).
+        ech = (f'&IF({vl_jour}="",", à régler sous 8 jours.",'
+               f'", à régler avant le "&{vl_jour}&" "&$C$5&" "&$E$5&".")')
         corps = "=" + base_txt + ech
         corps_rows = 3
     elif kind == "relance":
@@ -1662,14 +1676,15 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
                  f'remercions de régulariser cette somme dans les meilleurs délais."')
         corps_rows = 4
     else:   # mise_en_demeure
-        prefixe = f"En exécution du bail conclu le {date_bail}, " if date_bail else ""
-        corps = (f'="Madame, Monsieur, {prefixe}nous vous mettons en demeure de régler sous '
-                 f'8 jours la somme de "&FIXED({cellule["reste_global"]},2,TRUE)&" € '
-                 f'correspondant aux loyers et charges restant dus pour le logement situé "'
-                 f'&$D$10&". À défaut de règlement dans ce délai, nous nous réservons le droit '
-                 f'de faire délivrer un commandement de payer par commissaire de justice visant '
-                 f'la clause résolutoire du bail, puis de saisir le juge des contentieux de la '
-                 f'protection."')
+        # Référence au bail du locataire (vide => phrase omise) via IF dans la formule.
+        corps = (f'="Madame, Monsieur, "&IF({vl_bail}="","",'
+                 f'"En exécution du bail conclu le "&{vl_bail}&", ")'
+                 f'&"nous vous mettons en demeure de régler sous 8 jours la somme de "'
+                 f'&FIXED({cellule["reste_global"]},2,TRUE)&" € correspondant aux loyers et '
+                 f'charges restant dus pour le logement situé "&$D$10&". À défaut de règlement '
+                 f'dans ce délai, nous nous réservons le droit de faire délivrer un commandement '
+                 f'de payer par commissaire de justice visant la clause résolutoire du bail, '
+                 f'puis de saisir le juge des contentieux de la protection."')
         corps_rows = 5
 
     r = fin + 1
@@ -1677,13 +1692,14 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     ws.cell(r, 2, corps).alignment = Alignment(wrap_text=True, vertical="top")
     r += corps_rows + 1
 
-    # Modalités de paiement (avis + mise en demeure) si renseignées en config.
-    if kind in ("avis", "mise_en_demeure") and (mode_paiement or iban):
+    # Modalités de paiement (avis + mise en demeure). IBAN = bailleur (statique) ;
+    # mode de paiement = locataire (VLOOKUP selon le locataire sélectionné).
+    if kind in ("avis", "mise_en_demeure") and (iban or any_mode):
         ws.cell(r, 2, "Modalités de paiement :").font = Font(bold=True, color=CHARTE.primaire)
         r += 1
-        if mode_paiement:
+        if any_mode:
             ws.cell(r, 2, "Mode :").font = Font(bold=True)
-            ecrire_texte(ws, r, 3, mode_paiement)
+            ws.cell(r, 3, f"={vl_mode}")
             r += 1
         if iban:
             ws.cell(r, 2, "IBAN :").font = Font(bold=True)

@@ -253,6 +253,12 @@ class DialogueLocataire:
         self.observation = champ_liste(opts_obs, obs or None, "Motif de départ",
                                        largeur=DLG_CHAMP)
         self.observation.disabled = not parti
+        # Champs propres au bail, repris sur les documents de ce locataire.
+        self.date_bail = ChampDate(page, loc.get("date_bail", ""), largeur=DLG_CHAMP)
+        self.mode_paiement = champ_texte(loc.get("mode_paiement", ""),
+                                         "Mode de paiement", largeur=DLG_CHAMP)
+        self.jour_echeance = champ_texte(loc.get("jour_echeance", ""),
+                                         "Jour d'échéance (ex. 5)", largeur=DLG_CHAMP)
 
         self.dlg = ft.AlertDialog(
             modal=True,
@@ -290,7 +296,13 @@ class DialogueLocataire:
                          on_click=lambda e, v=a: self._remplir_adresse(v))
                  for a in self._sugg_adresses[:6]],
                 wrap=True, spacing=6, run_spacing=4))
-        gauche = ft.Column(items_g, spacing=12, tight=True)
+        items_g += [
+            titre_section("Documents (bail)", ft.Icons.RECEIPT_LONG_OUTLINED),
+            ft.Text("Date du bail", size=TS_LABEL, color=C_MUTED),
+            self.date_bail, self.mode_paiement, self.jour_echeance,
+        ]
+        gauche = ft.Column(items_g, spacing=12, tight=True,
+                           scroll=ft.ScrollMode.AUTO)
         droite = ft.Column([
             titre_section("Loyer & charges", ft.Icons.EURO_ROUNDED), *loyer,
             titre_section("Bail", ft.Icons.DESCRIPTION_OUTLINED),
@@ -298,15 +310,17 @@ class DialogueLocataire:
             self.date_entree, self.parti,
             ft.Text("Date de sortie", size=TS_LABEL, color=C_MUTED),
             self.date_sortie, self.caution_rendue, self.observation,
-        ], spacing=12, tight=True)
+        ], spacing=12, tight=True, scroll=ft.ScrollMode.AUTO)
 
+        # Hauteur bornée + colonnes défilantes : le dialogue ne déborde jamais,
+        # quel que soit le nombre de champs actifs selon les modules.
         return ft.Container(
-            width=720,
+            width=720, height=520,
             content=ft.Row([
                 ft.Container(gauche, width=334),
                 ft.VerticalDivider(width=1, color=C_LINE),
                 ft.Container(droite, width=334),
-            ], spacing=18, vertical_alignment=ft.CrossAxisAlignment.START))
+            ], spacing=18, vertical_alignment=ft.CrossAxisAlignment.STRETCH))
 
     def _remplir_adresse(self, valeur: str):
         self.adresse.value = valeur
@@ -353,11 +367,14 @@ class DialogueLocataire:
             data["date_entree"] = self.date_entree.get()
             parti = self.parti.value
             data["date_sortie"] = self.date_sortie.get() if parti else ""
+            data["date_bail"] = self.date_bail.get()
         except ValueError as exc:
             self._erreur(str(exc) or "Saisie invalide.")
             return
         data["caution_rendue"] = bool(self.caution_rendue.value) if parti else False
         data["observation"] = (self.observation.value or "").strip() if parti else ""
+        data["mode_paiement"] = (self.mode_paiement.value or "").strip()
+        data["jour_echeance"] = (self.jour_echeance.value or "").strip()
         self.page.close(self.dlg)
         self.on_valider(data)
 
@@ -470,10 +487,7 @@ class AppLoyers:
                 "adresse": self.b_adresse.value.strip(),
                 "tel": self.b_tel.value.strip(),
                 "email": self.b_email.value.strip(),
-                "mode_paiement": self.b_mode_paiement.value.strip(),
                 "iban": self.b_iban.value.strip(),
-                "jour_echeance": self.b_jour_echeance.value.strip(),
-                "date_bail": self.b_date_bail.value.strip(),
             },
             "periode": {
                 "annee_debut": int(self.an_debut.value or 0),
@@ -781,10 +795,7 @@ class AppLoyers:
         self.b_adresse.value = b.get("adresse", "")
         self.b_tel.value = b.get("tel", "")
         self.b_email.value = b.get("email", "")
-        self.b_mode_paiement.value = b.get("mode_paiement", "")
         self.b_iban.value = b.get("iban", "")
-        self.b_jour_echeance.value = str(b.get("jour_echeance", "") or "")
-        self.b_date_bail.value = b.get("date_bail", "")
         per = cfg.get("periode", {}) or {}
         self.an_debut.value = str(per.get("annee_debut", cfg.get("annee_debut", "")))
         self.an_fin.value = str(per.get("annee_fin", cfg.get("annee_fin", "")))
@@ -960,15 +971,9 @@ class AppLoyers:
                                  icone=ft.Icons.PHONE_OUTLINED)
         self.b_email = champ_texte(label="E-mail", expand=True,
                                    icone=ft.Icons.MAIL_OUTLINED)
-        # Champs facultatifs repris sur les documents (avis, mise en demeure).
-        self.b_mode_paiement = champ_texte(label="Mode de paiement", expand=True,
-                                           icone=ft.Icons.PAYMENTS_OUTLINED)
+        # IBAN du bailleur (compte de réception) repris sur les documents.
         self.b_iban = champ_texte(label="IBAN", expand=True,
                                   icone=ft.Icons.ACCOUNT_BALANCE_OUTLINED)
-        self.b_jour_echeance = champ_texte(label="Jour d'échéance", expand=True,
-                                           icone=ft.Icons.EVENT_OUTLINED)
-        self.b_date_bail = champ_texte(label="Date du bail (AAAA-MM-JJ)", expand=True,
-                                       icone=ft.Icons.DESCRIPTION_OUTLINED)
 
         self.an_debut = champ_texte("2024", "Année de début", expand=True)
         self.an_fin = champ_texte("2026", "Année de fin", expand=True)
@@ -992,8 +997,7 @@ class AppLoyers:
                        vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 self.b_adresse,
                 ft.Row([self.b_tel, self.b_email], spacing=10),
-                ft.Row([self.b_mode_paiement, self.b_jour_echeance], spacing=10),
-                ft.Row([self.b_iban, self.b_date_bail], spacing=10),
+                self.b_iban,
             ], icone=ft.Icons.PERSON_OUTLINE),
             ft.Divider(height=1, color=C_LINE),
             self._carte("Période", [

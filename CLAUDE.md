@@ -137,9 +137,13 @@ sont préservées par `recolter_regularisation` et `recolter_irl`, en plus de `r
   (`kind` dédié) cite le bail, la clause résolutoire et le commandement de payer par commissaire
   de justice. Relance + mise en demeure affichent le **reste dû cumulé** (`SUMIFS` sur le seul
   locataire, toutes périodes) ; pas de détail mois par mois (modèle à sélecteur unique). Champs
-  **bailleur optionnels** (libres, pass-through par `migrer_config`) repris sur les documents :
-  `mode_paiement`, `iban` (avis + mise en demeure), `jour_echeance` (échéance précise sur l'avis),
-  `date_bail` (mise en demeure ; affiché en JJ/MM/AAAA si saisi en ISO).
+  optionnels repris sur les documents, **au bon niveau** : `iban` = **bailleur** (compte de
+  réception, statique) ; `mode_paiement`, `jour_echeance`, `date_bail` = **locataire** (clauses du
+  bail) — ajoutés comme colonnes du référentiel Locataires quand le module `documents` est actif,
+  lus par `VLOOKUP` selon le locataire sélectionné (jamais en dur). Montants formatés via
+  **`FIXED(x,2,TRUE)`** et non `TEXT(...,"0.00")` (la chaîne de format de `TEXT` est localisée :
+  en Excel FR le `.` est mal interprété → 4,62 au lieu de 461,61). `date_bail` saisi en ISO est
+  affiché en JJ/MM/AAAA dans le référentiel.
 
 - **Bilan structuré** (`construire_bilan`) : titre + **évolution annuelle** (1 ligne/année,
   portefeuille) + **synthèse par locataire** (toutes années) + **un bloc détail par année**.
