@@ -60,11 +60,18 @@ def main() -> int:
     g1 = wb["Tableau de bord"]._charts[0]
     assert g1.series[0].graphicalProperties.solidFill.srgbClr == "4472C4", \
         "palette Office attendue avec style_excel=True"
+    import zipfile
+    with zipfile.ZipFile(f1) as _z:
+        _n = _z.namelist()
+        assert "xl/charts/style1.xml" in _n and "xl/charts/colors1.xml" in _n, _n
+        assert b"AlternateContent" in _z.read("xl/charts/chart1.xml"), "marqueur c14 absent"
     fns = tmp / "nostyle.xlsx"
     g.generer_workbook(g.valider_config({**CFG_COMPLET, "style_excel": False}), fns)
     gns = load_workbook(fns)["Tableau de bord"]._charts[0]
     assert gns.series[0].graphicalProperties.solidFill.srgbClr != "4472C4", \
         "couleurs du thème attendues avec style_excel=False"
+    with zipfile.ZipFile(fns) as _z:
+        assert "xl/charts/style1.xml" not in _z.namelist(), "style injecté malgré style_excel=False"
     # Onglet locataire nommé « identifiant - Nom » (évite les doublons même appartement).
     # Tableau de bord en 2e position (juste après le Guide).
     attendus = ["Guide", "Tableau de bord", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob",

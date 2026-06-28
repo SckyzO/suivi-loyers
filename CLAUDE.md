@@ -146,14 +146,17 @@ sont préservées par `recolter_regularisation` et `recolter_irl`, en plus de `r
   affiché en JJ/MM/AAAA dans le référentiel.
 
 - **Style des graphes du tableau de bord** (clé config `style_excel`, défaut `True`, case
-  « Générer pour Microsoft Excel » dans les deux UIs) : les couleurs de séries sont posées
-  **explicitement via `spPr`** dans `graphe()` (`GraphicalProperties(solidFill=...)`) — seule
-  méthode fiable. Les parties `chartStyle`/`colorStyle` Microsoft (le « Style 1 » du pinceau)
-  **ne marchent PAS** sur les graphes openpyxl : ce sont des graphes au format « ancien » et Excel
-  ignore ces parties (Microsoft Q&A « style1.xml/color1.xml not recognized for older charts »).
-  `style_excel=True` → palette Office (`4472C4`/`ED7D31`/… : look Excel bleu/orange) ; `False` →
-  couleurs du thème du classeur (CHARTE). `spPr` est honoré par Excel ET LibreOffice (vérifiable
-  au rendu). Ne pas réintroduire d'injection de parties chartStyle (impasse documentée).
+  « Générer pour Microsoft Excel » dans les deux UIs). Deux couches, cumulatives :
+  (1) lisibilité TOUJOURS, via `graphe()`/`_police_graphique` : couleurs de séries explicites
+  `spPr` (palette Office `4472C4`/`ED7D31`/… si `style_excel`, sinon CHARTE), axe `#,##0`
+  (« 25 000 », pas « 25,000.00 € »), polices 10 pt axes / 14 pt titre, quadrillage clair —
+  honoré par Excel ET LibreOffice. (2) si `style_excel`, `_appliquer_style_excel` post-traite le
+  `.xlsx` (zip) pour le **vrai « Style 1 » d'Excel** : openpyxl émet des graphes « anciens »
+  qu'Excel ne style pas (Microsoft Q&A) ; on **marque chaque `chart.xml` comme moderne** (bloc
+  `mc:AlternateContent`/`c14:style`, namespace par défaut → fallback `<style>` sans préfixe `c:`),
+  puis on injecte les parties `chartStyle`/`colorStyle` (templates `chart_style.py`), relations et
+  content-types. Refs de données = celles d'openpyxl (robuste aux changements). **Non vérifiable
+  hors Excel** (LibreOffice ignore les styles MS). `chart_style.py` embarqué (Dockerfile + SRC).
 
 - **Bilan structuré** (`construire_bilan`) : titre + **évolution annuelle** (1 ligne/année,
   portefeuille) + **synthèse par locataire** (toutes années) + **un bloc détail par année**.

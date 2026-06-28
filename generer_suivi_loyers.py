@@ -29,6 +29,7 @@ import sys
 import re
 import math
 import shutil
+import zipfile
 import calendar
 import warnings
 import datetime as dt
@@ -2114,7 +2115,62 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
         except OSError:
             pass
     wb.save(sortie)
+    if cfg.get("style_excel", True):
+        _appliquer_style_excel(sortie)
     return sortie
+
+
+def _appliquer_style_excel(path: Path) -> None:
+    """Style de graphique natif Microsoft (« Style 1 »). openpyxl produit des graphes
+    « anciens » qu'Excel ne style pas ; on post-traite le .xlsx (zip) pour : (1) marquer
+    chaque chart.xml comme « moderne » (bloc c14:style) — c'est ce qui autorise Excel à
+    appliquer le style ; (2) injecter les parties chartStyle/colorStyle, leurs relations
+    et les content-types. Les références de données restent celles d'openpyxl (robuste).
+    Sans effet si le classeur n'a aucun graphe."""
+    import chart_style
+    path = Path(path)
+    with zipfile.ZipFile(path) as z:
+        contenu = {n: z.read(n) for n in z.namelist()}
+    charts = sorted(n for n in contenu if re.fullmatch(r"xl/charts/chart\d+\.xml", n))
+    if not charts:
+        return
+
+    rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2011/'
+            'relationships/chartStyle" Target="style{i}.xml"/>'
+            '<Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/'
+            'relationships/chartColorStyle" Target="colors{i}.xml"/></Relationships>')
+    overrides = []
+    for n in charts:
+        i = re.search(r"chart(\d+)\.xml", n).group(1)
+        xml = contenu[n].decode("utf-8")
+        if "<mc:AlternateContent" not in xml:   # marquer le chart comme « moderne »
+            if "<roundedCorners" in xml:
+                xml = re.sub(r"(<roundedCorners[^>]*/>)",
+                             lambda m: m.group(1) + chart_style.C14_BLOC, xml, count=1)
+            else:
+                xml = re.sub(r"(<chartSpace[^>]*>)",
+                             lambda m: m.group(1) + chart_style.C14_BLOC, xml, count=1)
+            contenu[n] = xml.encode("utf-8")
+        contenu[f"xl/charts/style{i}.xml"] = chart_style.STYLE_XML.encode("utf-8")
+        contenu[f"xl/charts/colors{i}.xml"] = chart_style.COLORS_XML.encode("utf-8")
+        contenu[f"xl/charts/_rels/chart{i}.xml.rels"] = rels.format(i=i).encode("utf-8")
+        overrides.append(
+            f'<Override PartName="/xl/charts/style{i}.xml" '
+            'ContentType="application/vnd.ms-office.chartstyle+xml"/>'
+            f'<Override PartName="/xl/charts/colors{i}.xml" '
+            'ContentType="application/vnd.ms-office.chartcolorstyle+xml"/>')
+    ct = "[Content_Types].xml"
+    contenu[ct] = contenu[ct].decode("utf-8").replace(
+        "</Types>", "".join(overrides) + "</Types>").encode("utf-8")
+
+    tmp = path.with_name(path.name + ".tmp")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(ct, contenu.pop(ct))
+        for k, b in contenu.items():
+            z.writestr(k, b)
+    tmp.replace(path)
 
 
 def generer(chemin_config: Path, dossier_sortie: Path) -> Path:
