@@ -470,6 +470,10 @@ class AppLoyers:
                 "adresse": self.b_adresse.value.strip(),
                 "tel": self.b_tel.value.strip(),
                 "email": self.b_email.value.strip(),
+                "mode_paiement": self.b_mode_paiement.value.strip(),
+                "iban": self.b_iban.value.strip(),
+                "jour_echeance": self.b_jour_echeance.value.strip(),
+                "date_bail": self.b_date_bail.value.strip(),
             },
             "periode": {
                 "annee_debut": int(self.an_debut.value or 0),
@@ -777,6 +781,10 @@ class AppLoyers:
         self.b_adresse.value = b.get("adresse", "")
         self.b_tel.value = b.get("tel", "")
         self.b_email.value = b.get("email", "")
+        self.b_mode_paiement.value = b.get("mode_paiement", "")
+        self.b_iban.value = b.get("iban", "")
+        self.b_jour_echeance.value = str(b.get("jour_echeance", "") or "")
+        self.b_date_bail.value = b.get("date_bail", "")
         per = cfg.get("periode", {}) or {}
         self.an_debut.value = str(per.get("annee_debut", cfg.get("annee_debut", "")))
         self.an_fin.value = str(per.get("annee_fin", cfg.get("annee_fin", "")))
@@ -952,6 +960,15 @@ class AppLoyers:
                                  icone=ft.Icons.PHONE_OUTLINED)
         self.b_email = champ_texte(label="E-mail", expand=True,
                                    icone=ft.Icons.MAIL_OUTLINED)
+        # Champs facultatifs repris sur les documents (avis, mise en demeure).
+        self.b_mode_paiement = champ_texte(label="Mode de paiement", expand=True,
+                                           icone=ft.Icons.PAYMENTS_OUTLINED)
+        self.b_iban = champ_texte(label="IBAN", expand=True,
+                                  icone=ft.Icons.ACCOUNT_BALANCE_OUTLINED)
+        self.b_jour_echeance = champ_texte(label="Jour d'échéance", expand=True,
+                                           icone=ft.Icons.EVENT_OUTLINED)
+        self.b_date_bail = champ_texte(label="Date du bail (AAAA-MM-JJ)", expand=True,
+                                       icone=ft.Icons.DESCRIPTION_OUTLINED)
 
         self.an_debut = champ_texte("2024", "Année de début", expand=True)
         self.an_fin = champ_texte("2026", "Année de fin", expand=True)
@@ -975,6 +992,8 @@ class AppLoyers:
                        vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 self.b_adresse,
                 ft.Row([self.b_tel, self.b_email], spacing=10),
+                ft.Row([self.b_mode_paiement, self.b_jour_echeance], spacing=10),
+                ft.Row([self.b_iban, self.b_date_bail], spacing=10),
             ], icone=ft.Icons.PERSON_OUTLINE),
             ft.Divider(height=1, color=C_LINE),
             self._carte("Période", [

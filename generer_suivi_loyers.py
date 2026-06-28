@@ -1448,27 +1448,49 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     idx = ref_loc["idx"]
     annees = list(range(cfg["annee_debut"], cfg["annee_fin"] + 1))
 
+    # base : « recu » = atteste un paiement (quittance) ; « du » = appelle/réclame.
     specs = {
         "quittance": {
             "feuille": "Quittance", "titre": "QUITTANCE DE LOYER",
             "base": "recu",
-            "intro": "déclare avoir reçu de",
-            "note": "Quittance valable uniquement si le loyer est intégralement réglé.",
+            "note": "Quittance valable uniquement si le loyer est intégralement réglé ; "
+                    "à défaut, le présent document vaut reçu de paiement partiel (art. 21 "
+                    "de la loi du 6 juillet 1989). Envoi par voie électronique soumis à "
+                    "l'accord exprès du locataire.",
         },
         "avis": {
             "feuille": "Avis d'échéance", "titre": "AVIS D'ÉCHÉANCE",
             "base": "du",
-            "intro": "informe",
             "note": "Ce document ne peut tenir lieu de quittance.",
         },
         "relance": {
             "feuille": "Lettre de relance", "titre": "LETTRE DE RELANCE",
-            "base": "du",
-            "intro": "n'a pas reçu le paiement de",
-            "note": "En cas de nouveau retard, des frais de relance pourront être facturés.",
+            "base": "arrieres",
+            "note": "Rappel amiable. À défaut de régularisation, il pourra être suivi d'une "
+                    "mise en demeure par lettre recommandée avec accusé de réception.",
+        },
+        "mise_en_demeure": {
+            "feuille": "Mise en demeure", "titre": "MISE EN DEMEURE DE PAYER",
+            "base": "arrieres",
+            "note": "À adresser par lettre recommandée avec accusé de réception. Ce courrier "
+                    "ne vaut pas commandement de payer (acte de commissaire de justice).",
         },
     }
     spec = specs[kind]
+
+    b = cfg["bailleur"]
+    # Champs optionnels (libres) ; assainis quand ils sont injectés dans une formule.
+    def _form_safe(cle: str) -> str:
+        return str(b.get(cle) or "").strip().replace('"', "")
+    iban = str(b.get("iban") or "").strip()
+    mode_paiement = str(b.get("mode_paiement") or "").strip()
+    jour_echeance = _form_safe("jour_echeance")
+    # date_bail : affichée au format français si saisie en ISO, sinon telle quelle.
+    _db = _form_safe("date_bail")
+    try:
+        date_bail = dt.date.fromisoformat(_db).strftime("%d/%m/%Y") if _db else ""
+    except ValueError:
+        date_bail = _db
 
     ws = wb.create_sheet(spec["feuille"])
     ws.sheet_view.showGridLines = False
@@ -1478,7 +1500,7 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
 
     ws.merge_cells("B2:E2")
     titre = ws["B2"]
-    titre.value = spec["titre"]
+    titre.value = spec["titre"]   # quittance : remplacé par une formule conditionnelle plus bas
     titre.font = Font(bold=True, size=18, color=CHARTE.primaire)
     titre.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[2].height = 26
@@ -1510,7 +1532,6 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
         return f'IFERROR(VLOOKUP($C$4,RefLocataires,{idx[field]},FALSE),"")'
 
     # Bloc bailleur (gauche) et locataire (droite).
-    b = cfg["bailleur"]
     ws["B7"] = "Le bailleur :"
     ws["B7"].font = Font(bold=True, color=CHARTE.primaire)
     ecrire_texte(ws, 8, 2, b.get("nom", ""))
@@ -1529,26 +1550,44 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     def sif(plage: str) -> str:
         return f"SUMIFS({plage},{crit})"
 
-    # Tableau des montants.
+    # Reste dû cumulé (toutes périodes) pour le locataire sélectionné : critère sur
+    # le seul locataire (relance / mise en demeure réclament la dette globale, pas
+    # le seul mois sélectionné). Pas de détail mois par mois (modèle à sélecteur unique).
+    def sif_loc(plage: str) -> str:
+        return f"SUMIFS({plage},Suivi_Locataire,$C$4)"
+
+    # ROUND au centime : Suivi_TotalDu est calculé en direct (prorata => fractions de
+    # centime) alors que Suivi_TotalRecu vient d'une saisie arrondie ; sans arrondi, un
+    # mois soldé apparaîtrait « restant dû 0,001 € » et fausserait la bascule quittance.
+    reste_global = f'ROUND({sif_loc("Suivi_TotalDu")}-{sif_loc("Suivi_TotalRecu")},2)'
+
+    # Tableau des montants. Chaque ligne porte une clé (ou None) repérant les totaux
+    # réutilisés par le titre/corps, pour ne pas dépendre de la position des lignes.
     r0 = 13
-    lignes = []
-    if spec["base"] == "recu":
+    lignes = []   # (label, formule, cle)
+    if spec["base"] == "recu":   # quittance
         if split:
-            lignes += [("Loyer nu", sif("Suivi_LoyerNuDu")),
-                       ("Charges", sif("Suivi_ChargesDu"))]
-        lignes.append(("Total loyer + charges dû", sif("Suivi_TotalDu")))
+            lignes += [("Loyer nu", sif("Suivi_LoyerNuDu"), None),
+                       ("Charges", sif("Suivi_ChargesDu"), None)]
+        lignes.append(("Total loyer + charges dû", sif("Suivi_TotalDu"), "du"))
         if caf:
-            lignes += [("Dont part CAF reçue", sif("Suivi_CAFRecue")),
-                       ("Dont part locataire reçue", sif("Suivi_LocRecu"))]
-        lignes.append(("Montant total reçu", sif("Suivi_TotalRecu")))
-    else:  # avis / relance : montants dus
+            lignes += [("Dont part CAF reçue", sif("Suivi_CAFRecue"), None),
+                       ("Dont part locataire reçue", sif("Suivi_LocRecu"), None)]
+        lignes.append(("Montant total reçu", sif("Suivi_TotalRecu"), "recu"))
+    elif spec["base"] == "arrieres":   # relance / mise en demeure
         if split:
-            lignes += [("Loyer pour la période", sif("Suivi_LoyerNuDu")),
-                       ("Charges (provisions)", sif("Suivi_ChargesDu"))]
-        lignes.append(("Total à régler", sif("Suivi_TotalDu")))
-        if spec["base"] == "du" and kind == "relance":
-            lignes.append(("Déjà reçu", sif("Suivi_TotalRecu")))
-            lignes.append(("Reste dû", f'{sif("Suivi_TotalDu")}-{sif("Suivi_TotalRecu")}'))
+            lignes += [("Loyer pour la période", sif("Suivi_LoyerNuDu"), None),
+                       ("Charges (provisions)", sif("Suivi_ChargesDu"), None)]
+        lignes.append(("Total dû (période)", sif("Suivi_TotalDu"), "du"))
+        lignes.append(("Déjà reçu (période)", sif("Suivi_TotalRecu"), "recu"))
+        lignes.append(("Reste dû (période)",
+                       f'ROUND({sif("Suivi_TotalDu")}-{sif("Suivi_TotalRecu")},2)', "reste"))
+        lignes.append(("Reste dû — toutes périodes", reste_global, "reste_global"))
+    else:   # avis
+        if split:
+            lignes += [("Loyer pour la période", sif("Suivi_LoyerNuDu"), None),
+                       ("Charges (provisions)", sif("Suivi_ChargesDu"), None)]
+        lignes.append(("Total à régler", sif("Suivi_TotalDu"), "du"))
 
     # Récap encadré : libellé (B) + valeur (C). Les lignes de total sont surlignées
     # dans la teinte douce du thème pour ressortir sans alourdir.
@@ -1567,16 +1606,22 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
             lab.fill = val.fill = _fill_total
         return val
 
-    montant_row = r0
-    for i, (label, formule) in enumerate(lignes):
+    cellule = {}   # cle -> référence de cellule "$C$<row>"
+    for i, (label, formule, cle) in enumerate(lignes):
         r = r0 + i
-        total = label.startswith(("Montant total", "Total", "Reste dû"))
+        total = cle is not None
         val = _ligne_recap(r, label, gras=total, total=total)
         val.value = f"={formule}"
         val.number_format = FMT_EURO
-        if total:
-            montant_row = r
-    montant_cell = f"$C${montant_row}"
+        if cle:
+            cellule[cle] = f"$C${r}"
+
+    # Titre conditionnel de la quittance : reçu intégral => quittance, sinon reçu partiel.
+    if kind == "quittance":
+        du, recu = cellule["du"], cellule["recu"]
+        # Soldé au centime près => quittance ; sinon reçu partiel (cf. ROUND ci-dessus).
+        titre.value = (f'=IF(AND({du}>0,ROUND({du}-{recu},2)<=0),"QUITTANCE DE LOYER",'
+                       f'"REÇU DE PAIEMENT PARTIEL")')
 
     fin = r0 + len(lignes)
     if kind == "quittance":
@@ -1586,37 +1631,81 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
         cd.number_format = FMT_DATE
         fin = r_date + 1
 
-    # Corps + mention.
-    r_corps = fin + 1
-    ws.merge_cells(start_row=r_corps, start_column=2, end_row=r_corps + 2, end_column=5)
+    # Corps (curseur de ligne : le corps, puis des blocs optionnels, puis la signature).
     if kind == "quittance":
-        corps = (f'="Je soussigné(e) "&$B$8&", bailleur, déclare avoir reçu de "&$C$4'
-                 f'&" la somme de "&TEXT({montant_cell},"0.00")&" € au titre du loyer et des '
-                 f'charges pour la période de "&$C$5&" "&$E$5'
+        du, recu = cellule["du"], cellule["recu"]
+        plein = (f'"Je soussigné(e) "&$B$8&", bailleur, déclare avoir reçu de "&$C$4'
+                 f'&" la somme de "&TEXT({recu},"0.00")&" € au titre du loyer et des charges '
+                 f'pour la période de "&$C$5&" "&$E$5'
                  f'&", et lui en donne quittance, sous réserve de tous mes droits."')
+        partiel = (f'"Je soussigné(e) "&$B$8&", bailleur, déclare avoir reçu de "&$C$4'
+                   f'&" la somme de "&TEXT({recu},"0.00")&" € à valoir sur le loyer et les '
+                   f'charges de la période de "&$C$5&" "&$E$5&" (montant dû : "'
+                   f'&TEXT({du},"0.00")&" €, restant dû : "&TEXT(ROUND({du}-{recu},2),"0.00")'
+                   f'&" €). Le présent reçu ne vaut pas quittance."')
+        corps = f"=IF(AND({du}>0,ROUND({du}-{recu},2)<=0),{plein},{partiel})"
+        corps_rows = 4
     elif kind == "avis":
-        corps = (f'="Madame, Monsieur, veuillez trouver le montant de votre loyer pour la '
-                 f'période de "&$C$5&" "&$E$5&", soit "&TEXT({montant_cell},"0.00")'
-                 f'&" €, à régler sous 8 jours."')
-    else:
+        montant_cell = cellule["du"]
+        base_txt = (f'"Madame, Monsieur, veuillez trouver le montant de votre loyer pour la '
+                    f'période de "&$C$5&" "&$E$5&", soit "&TEXT({montant_cell},"0.00")&" €"')
+        if jour_echeance:
+            ech = f'&", à régler avant le {jour_echeance} "&$C$5&" "&$E$5&"."'
+        else:
+            ech = '&", à régler sous 8 jours."'
+        corps = "=" + base_txt + ech
+        corps_rows = 3
+    elif kind == "relance":
         corps = (f'="Madame, Monsieur, sauf erreur de notre part, le loyer de la période de "'
-                 f'&$C$5&" "&$E$5&" reste impayé. Nous vous remercions de régulariser la somme '
-                 f'de "&TEXT({montant_cell},"0.00")&" € sous 8 jours."')
-    cc = ws.cell(r_corps, 2, corps)
-    cc.alignment = Alignment(wrap_text=True, vertical="top")
+                 f'&$C$5&" "&$E$5&" demeure impayé. À ce jour, le solde restant dû pour ce '
+                 f'logement est de "&TEXT({cellule["reste_global"]},"0.00")&" €. Nous vous '
+                 f'remercions de régulariser cette somme dans les meilleurs délais."')
+        corps_rows = 4
+    else:   # mise_en_demeure
+        prefixe = f"En exécution du bail conclu le {date_bail}, " if date_bail else ""
+        corps = (f'="Madame, Monsieur, {prefixe}nous vous mettons en demeure de régler sous '
+                 f'8 jours la somme de "&TEXT({cellule["reste_global"]},"0.00")&" € '
+                 f'correspondant aux loyers et charges restant dus pour le logement situé "'
+                 f'&$D$10&". À défaut de règlement dans ce délai, nous nous réservons le droit '
+                 f'de faire délivrer un commandement de payer par commissaire de justice visant '
+                 f'la clause résolutoire du bail, puis de saisir le juge des contentieux de la '
+                 f'protection."')
+        corps_rows = 5
 
-    r_note = r_corps + 4
-    ws.cell(r_note, 2, spec["note"]).font = Font(italic=True)
-    r_sign = r_note + 2
-    ws.cell(r_sign, 2, "Fait à ……………………………, le ……………………………")
-    ws.cell(r_sign + 2, 2, "Signature du bailleur :").font = Font(bold=True)
+    r = fin + 1
+    ws.merge_cells(start_row=r, start_column=2, end_row=r + corps_rows - 1, end_column=5)
+    ws.cell(r, 2, corps).alignment = Alignment(wrap_text=True, vertical="top")
+    r += corps_rows + 1
+
+    # Modalités de paiement (avis + mise en demeure) si renseignées en config.
+    if kind in ("avis", "mise_en_demeure") and (mode_paiement or iban):
+        ws.cell(r, 2, "Modalités de paiement :").font = Font(bold=True, color=CHARTE.primaire)
+        r += 1
+        if mode_paiement:
+            ws.cell(r, 2, "Mode :").font = Font(bold=True)
+            ecrire_texte(ws, r, 3, mode_paiement)
+            r += 1
+        if iban:
+            ws.cell(r, 2, "IBAN :").font = Font(bold=True)
+            ecrire_texte(ws, r, 3, iban)
+            r += 1
+        r += 1
+
+    ws.merge_cells(start_row=r, start_column=2, end_row=r + 2, end_column=5)
+    note = ws.cell(r, 2, spec["note"])
+    note.font = Font(italic=True)
+    note.alignment = Alignment(wrap_text=True, vertical="top")
+    r += 4
+    ws.cell(r, 2, "Fait à ……………………………, le ……………………………")
+    r += 2
+    ws.cell(r, 2, "Signature du bailleur :").font = Font(bold=True)
 
     # Document destiné à l'impression : une page A4 portrait, centrée.
-    mettre_en_page_impression(ws, f"A1:E{r_sign + 2}")
+    mettre_en_page_impression(ws, f"A1:E{r}")
 
 
 def construire_documents(wb: Workbook, cfg: dict, ref_loc: dict) -> None:
-    for kind in ("quittance", "avis", "relance"):
+    for kind in ("quittance", "avis", "relance", "mise_en_demeure"):
         construire_document(wb, cfg, ref_loc, kind)
 
 

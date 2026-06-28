@@ -15,6 +15,11 @@ bailleur:
   adresse: "12 rue des Lilas, 35000 Rennes"
   tel: "06 12 34 56 78"
   email: "contact@les-tilleuls.fr"
+  # Champs facultatifs repris sur les documents (avis d'échéance, mise en demeure).
+  mode_paiement: "Virement bancaire"      # imprimé sous l'avis d'échéance
+  iban: "FR76 3000 1000 0100 0000 0000 123"
+  jour_echeance: "5"                       # « à régler avant le 5 <mois> » sur l'avis
+  date_bail: "2023-06-01"                  # référence du bail sur la mise en demeure
 
 periode:
   annee_debut: 2024

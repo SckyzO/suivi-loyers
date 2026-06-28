@@ -59,11 +59,15 @@ def main() -> int:
     # Tableau de bord en 2e position (juste après le Guide).
     attendus = ["Guide", "Tableau de bord", "Locataires", "Appt 1 - Alice", "Appt 2 - Bob",
                 "Données", "Bilan", "Régularisation charges", "Révision IRL",
-                "Quittance", "Avis d'échéance", "Lettre de relance"]
+                "Quittance", "Avis d'échéance", "Lettre de relance", "Mise en demeure"]
     assert wb.sheetnames == attendus, wb.sheetnames
     assert wb["Données"].sheet_state == "hidden"
-    assert wb["Quittance"]["B2"].value == "QUITTANCE DE LOYER"
+    # Titre de la quittance = formule conditionnelle (quittance si soldé, sinon reçu partiel).
+    titre_q = wb["Quittance"]["B2"].value
+    assert titre_q.startswith("=IF("), titre_q
+    assert "QUITTANCE DE LOYER" in titre_q and "REÇU DE PAIEMENT PARTIEL" in titre_q, titre_q
     assert wb["Avis d'échéance"]["B2"].value == "AVIS D'ÉCHÉANCE"
+    assert wb["Mise en demeure"]["B2"].value == "MISE EN DEMEURE DE PAYER"
 
     # Charte : couleur d'onglet par rôle (bleu système / vert locataire / orange document /
     # gris Données) et gridlines masquées partout. Suit la charte résolue du moteur
@@ -77,7 +81,7 @@ def main() -> int:
             "Révision IRL": ch.onglet_systeme, "Données": ch.onglet_donnees,
             "Appt 1 - Alice": ch.onglet_locataire, "Appt 2 - Bob": ch.onglet_locataire,
             "Quittance": ch.onglet_document, "Avis d'échéance": ch.onglet_document,
-            "Lettre de relance": ch.onglet_document}
+            "Lettre de relance": ch.onglet_document, "Mise en demeure": ch.onglet_document}
     for nom, attendu in role.items():
         assert couleur_onglet(nom) == attendu, (nom, couleur_onglet(nom), attendu)
     for nom in wb.sheetnames:

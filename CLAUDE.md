@@ -28,7 +28,7 @@ et par l'interface. Garder cette frontière : pas de logique métier dans l'inte
 `Guide` · `Locataires` (référentiel) · **une feuille par locataire** (saisie, nommée par
 l'identifiant du bien) · `Données` (consolidée, **masquée**) · `Bilan` · `Tableau de bord`
 (graphiques) · `Régularisation charges` · `Révision IRL` · documents (`Quittance`,
-`Avis d'échéance`, `Lettre de relance`).
+`Avis d'échéance`, `Lettre de relance`, `Mise en demeure`).
 
 Flux de données clé :
 - La saisie a lieu dans les **feuilles locataire** (`construire_feuilles_locataires`). Leurs
@@ -121,12 +121,25 @@ et avertissement explicite si la config vient d'une version **plus récente** qu
 
 ## Modules (tous implémentés)
 
-`documents` (`construire_document`), `tableau_bord` (`construire_tableau_bord` : cartes de
+`documents` (`construire_document` ; 4 `kind` : `quittance`, `avis`, `relance`,
+`mise_en_demeure`), `tableau_bord` (`construire_tableau_bord` : cartes de
 synthèse KPI + graphiques openpyxl légendés/commentés basés sur le Bilan),
 `regularisation_charges` (`construire_regularisation` : filtre locataire + pré-remplissage =
 provisions en mode comprises) et `irl` (`construire_irl`). Les saisies propres à ces onglets
 sont préservées par `recolter_regularisation` et `recolter_irl`, en plus de `recolter_saisies`
 (mensuel).
+
+- **Documents conformes (art. 21 loi 1989)** : la **quittance** bascule en « REÇU DE PAIEMENT
+  PARTIEL » (titre + corps par formule `IF`) quand le reçu ne solde pas le dû — comparaison
+  sur l'**écart arrondi au centime** (`ROUND(du-recu,2)<=0`) car `Suivi_TotalDu` est calculé en
+  direct avec prorata (fractions de centime) alors que `Suivi_TotalRecu` est une saisie arrondie.
+  La **relance** n'annonce plus de « frais de relance » (non imputables) et la **mise en demeure**
+  (`kind` dédié) cite le bail, la clause résolutoire et le commandement de payer par commissaire
+  de justice. Relance + mise en demeure affichent le **reste dû cumulé** (`SUMIFS` sur le seul
+  locataire, toutes périodes) ; pas de détail mois par mois (modèle à sélecteur unique). Champs
+  **bailleur optionnels** (libres, pass-through par `migrer_config`) repris sur les documents :
+  `mode_paiement`, `iban` (avis + mise en demeure), `jour_echeance` (échéance précise sur l'avis),
+  `date_bail` (mise en demeure ; affiché en JJ/MM/AAAA si saisi en ISO).
 
 - **Bilan structuré** (`construire_bilan`) : titre + **évolution annuelle** (1 ligne/année,
   portefeuille) + **synthèse par locataire** (toutes années) + **un bloc détail par année**.
