@@ -1635,20 +1635,20 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     if kind == "quittance":
         du, recu = cellule["du"], cellule["recu"]
         plein = (f'"Je soussigné(e) "&$B$8&", bailleur, déclare avoir reçu de "&$C$4'
-                 f'&" la somme de "&TEXT({recu},"0.00")&" € au titre du loyer et des charges '
+                 f'&" la somme de "&FIXED({recu},2,TRUE)&" € au titre du loyer et des charges '
                  f'pour la période de "&$C$5&" "&$E$5'
                  f'&", et lui en donne quittance, sous réserve de tous mes droits."')
         partiel = (f'"Je soussigné(e) "&$B$8&", bailleur, déclare avoir reçu de "&$C$4'
-                   f'&" la somme de "&TEXT({recu},"0.00")&" € à valoir sur le loyer et les '
+                   f'&" la somme de "&FIXED({recu},2,TRUE)&" € à valoir sur le loyer et les '
                    f'charges de la période de "&$C$5&" "&$E$5&" (montant dû : "'
-                   f'&TEXT({du},"0.00")&" €, restant dû : "&TEXT(ROUND({du}-{recu},2),"0.00")'
+                   f'&FIXED({du},2,TRUE)&" €, restant dû : "&FIXED(ROUND({du}-{recu},2),2,TRUE)'
                    f'&" €). Le présent reçu ne vaut pas quittance."')
         corps = f"=IF(AND({du}>0,ROUND({du}-{recu},2)<=0),{plein},{partiel})"
         corps_rows = 4
     elif kind == "avis":
         montant_cell = cellule["du"]
         base_txt = (f'"Madame, Monsieur, veuillez trouver le montant de votre loyer pour la '
-                    f'période de "&$C$5&" "&$E$5&", soit "&TEXT({montant_cell},"0.00")&" €"')
+                    f'période de "&$C$5&" "&$E$5&", soit "&FIXED({montant_cell},2,TRUE)&" €"')
         if jour_echeance:
             ech = f'&", à régler avant le {jour_echeance} "&$C$5&" "&$E$5&"."'
         else:
@@ -1658,13 +1658,13 @@ def construire_document(wb: Workbook, cfg: dict, ref_loc: dict, kind: str) -> No
     elif kind == "relance":
         corps = (f'="Madame, Monsieur, sauf erreur de notre part, le loyer de la période de "'
                  f'&$C$5&" "&$E$5&" demeure impayé. À ce jour, le solde restant dû pour ce '
-                 f'logement est de "&TEXT({cellule["reste_global"]},"0.00")&" €. Nous vous '
+                 f'logement est de "&FIXED({cellule["reste_global"]},2,TRUE)&" €. Nous vous '
                  f'remercions de régulariser cette somme dans les meilleurs délais."')
         corps_rows = 4
     else:   # mise_en_demeure
         prefixe = f"En exécution du bail conclu le {date_bail}, " if date_bail else ""
         corps = (f'="Madame, Monsieur, {prefixe}nous vous mettons en demeure de régler sous '
-                 f'8 jours la somme de "&TEXT({cellule["reste_global"]},"0.00")&" € '
+                 f'8 jours la somme de "&FIXED({cellule["reste_global"]},2,TRUE)&" € '
                  f'correspondant aux loyers et charges restant dus pour le logement situé "'
                  f'&$D$10&". À défaut de règlement dans ce délai, nous nous réservons le droit '
                  f'de faire délivrer un commandement de payer par commissaire de justice visant '
