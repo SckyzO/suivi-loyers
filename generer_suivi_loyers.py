@@ -1402,6 +1402,10 @@ def construire_tableau_bord(wb: Workbook, cfg: dict, layout: dict) -> None:
         cap.font = Font(italic=True, color=CHARTE.onglet_donnees)
         g.height, g.width = 8, 16
         g.legend.position = "b"
+        # Style intégré 2 = « Style 1 » de la galerie Excel (barres pleines colorées,
+        # coins arrondis) : rendu soigné dès la génération, sans repasser par Excel.
+        g.style = 2
+        g.roundedCorners = True
         ws.add_chart(g, f"B{ancre_row}")
 
     cats_loc = Reference(bilan, min_col=pos["nom"], min_row=glob["first"], max_row=glob["last"])
