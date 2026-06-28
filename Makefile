@@ -5,6 +5,7 @@
 #
 # Cibles utiles :
 #     make build      # construit l'image Docker
+#     make lint       # lint ruff (bugs/style)
 #     make test       # smoke test du moteur
 #     make gen        # génère les classeurs d'exemple dans exemples/
 #     make sync       # source + exemples -> dossier Windows
@@ -12,6 +13,7 @@
 
 SHELL := /bin/bash
 IMAGE := suivi-loyers:latest
+RUFF := ghcr.io/astral-sh/ruff:0.15.20   # image officielle ruff (version pinnée)
 COMPOSE := docker compose
 DOWNLOADS := $(HOME)/Downloads
 WIN_PROJECT := $(DOWNLOADS)/Suivi des loyers sur Excel
@@ -22,18 +24,23 @@ USERFLAG := --user $(shell id -u):$(shell id -g)
 
 # Fichiers source synchronisés côté Windows (pour builder l'.exe via build.bat).
 SRC := generer_suivi_loyers.py interface.py build.bat requirements.txt \
+       interface_flet.py build-flet.bat requirements-flet.txt \
        Dockerfile docker-compose.yml Makefile README.md CLAUDE.md .gitignore
 
 .DEFAULT_GOAL := all
-.PHONY: all build gen test sync sync-win sync-exemples clean
+.PHONY: all build lint gen test sync sync-win sync-exemples clean
 
-all: build gen test sync ## Workflow complet de fin de modification
+all: build lint gen test sync ## Workflow complet de fin de modification
+
+lint: ## Lint ruff (bugs/style) via l'image officielle — config dans ruff.toml
+	docker run --rm -v "$(CURDIR):/app" -w /app $(RUFF) check generer_suivi_loyers.py interface_flet.py interface.py tests
 
 build: ## Construit l'image Docker
 	docker build -t $(IMAGE) .
 
 gen: build ## Génère les classeurs d'exemple dans exemples/
 	@mkdir -p $(EXEMPLES)
+	@rm -f $(EXEMPLES)/*.xlsx   # repart à neuf : pas de .bak d'exemples accumulés
 	$(COMPOSE) run --rm $(USERFLAG) suivi configs/exemple.yaml $(EXEMPLES)
 	$(COMPOSE) run --rm $(USERFLAG) suivi configs/minimal.yaml $(EXEMPLES)
 
@@ -47,7 +54,7 @@ sync-win: ## Copie le code à jour dans le dossier Windows (pour build.bat)
 	  mkdir -p "$(WIN_PROJECT)/configs"; \
 	  cp $(SRC) "$(WIN_PROJECT)/"; \
 	  cp configs/*.yaml "$(WIN_PROJECT)/configs/"; \
-	  rm -rf "$(WIN_PROJECT)/__pycache__"; \
+	  rm -rf "$(WIN_PROJECT)/assets" "$(WIN_PROJECT)/__pycache__"; \
 	  echo "Source synchronisée -> $(WIN_PROJECT)"; \
 	else \
 	  echo "Dossier Windows absent, sync-win ignorée"; \

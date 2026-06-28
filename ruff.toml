@@ -1,0 +1,16 @@
+# Configuration ruff — lint du projet (cf. `make lint`).
+#
+# Choix assumés :
+#   - On N'IMPOSE PAS E501 (longueur de ligne) : le wrapping est fait à la main
+#     selon la lisibilité, certaines lignes (formules, libellés) vont jusqu'à ~110.
+#   - On N'IMPOSE PAS I (tri d'imports isort) : les imports openpyxl sont regroupés
+#     par sous-module de façon sémantique, pas alphabétique.
+# On garde : F (bugs/imports morts), E7 (dont E741/E702), E4/E9, W, B (bugbear).
+
+[lint]
+select = ["E4", "E7", "E9", "F", "W", "B"]
+
+[lint.per-file-ignores]
+# interface.py (UI Tkinter) : one-liners « libelle(); entree() » volontairement
+# compacts pour la densité du formulaire — E702 toléré ici uniquement.
+"interface.py" = ["E702"]
