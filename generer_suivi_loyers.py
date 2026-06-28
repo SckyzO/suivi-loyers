@@ -49,6 +49,7 @@ from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.chart import BarChart, Reference
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.text import RichText
+from openpyxl.drawing.line import LineProperties
 from openpyxl.drawing.text import (
     Paragraph, ParagraphProperties, CharacterProperties, Font as PoliceDessin,
 )
@@ -685,25 +686,25 @@ def appliquer_police(wb: Workbook, police: str) -> None:
             _police_graphique(chart, police)
 
 
-def _txpr(police: str, *, gras: bool = False) -> RichText:
-    """Propriétés de texte (police) pour un élément de graphique (axe, légende)."""
-    cp = CharacterProperties(latin=PoliceDessin(typeface=police), b=gras)
+def _txpr(police: str, *, gras: bool = False, sz: int | None = None) -> RichText:
+    """Propriétés de texte d'un élément de graphique (axe, légende). `sz` en 1/100 pt."""
+    cp = CharacterProperties(latin=PoliceDessin(typeface=police), b=gras, sz=sz)
     return RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
 
 
 def _police_graphique(chart, police: str) -> None:
-    """Applique la police d'identité au texte d'un graphique (titre, axes, légende) :
-    openpyxl ne couvre pas le texte des graphiques via les polices de cellule, il y
-    resterait donc du Calibri."""
-    chart.x_axis.txPr = _txpr(police)
-    chart.y_axis.txPr = _txpr(police)
+    """Applique la police d'identité ET des tailles lisibles au texte d'un graphique :
+    openpyxl laisse sinon du Calibri minuscule (axes/légende ~ illisibles à l'impression).
+    Tailles : axes/légende 10 pt, titre 14 pt gras."""
+    chart.x_axis.txPr = _txpr(police, sz=1000)
+    chart.y_axis.txPr = _txpr(police, sz=1000)
     if chart.legend is not None:
-        chart.legend.txPr = _txpr(police)
-    # Titre : texte déjà posé en RichText ; on force la police sur chaque paragraphe/run.
+        chart.legend.txPr = _txpr(police, sz=1000)
+    # Titre : texte déjà posé en RichText ; on force police + taille sur chaque run.
     rich = getattr(getattr(chart.title, "tx", None), "rich", None)
     if rich is not None:
         for para in rich.p:
-            cp = CharacterProperties(latin=PoliceDessin(typeface=police), b=True)
+            cp = CharacterProperties(latin=PoliceDessin(typeface=police), b=True, sz=1400)
             if para.pPr is None:
                 para.pPr = ParagraphProperties()
             para.pPr.defRPr = cp
@@ -1418,6 +1419,12 @@ def construire_tableau_bord(wb: Workbook, cfg: dict, layout: dict) -> None:
         g.height, g.width = 8, 16
         g.legend.position = "b"
         g.roundedCorners = True
+        # Axe des montants épuré (« 25 000 » au lieu de « 25,000.00 € » : bien plus
+        # lisible). Les graphes € sont en colonnes ; le graphe taux (%) reste intact.
+        if g.type == "col":
+            g.y_axis.numFmt = "#,##0"
+            g.y_axis.majorGridlines.spPr = GraphicalProperties(
+                ln=LineProperties(solidFill="E0E0E0"))
         for i, s in enumerate(g.series):
             s.graphicalProperties = GraphicalProperties(solidFill=palette[i % len(palette)])
         ws.add_chart(g, f"B{ancre_row}")
