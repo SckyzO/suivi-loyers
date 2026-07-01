@@ -1,0 +1,79 @@
+name: Build Windows executable
+
+# Construit dist/SuiviLoyers.exe (interface Flet) sous Windows — PyInstaller
+# n'est pas multi-plateforme — et publie l'archive .zip en Release GitHub.
+# Déclenché par un tag `v*` (ex. `git tag v1.0.0 && git push --tags`).
+# `workflow_dispatch` permet aussi un build manuel (artifact seul, sans release).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write  # requis pour créer la Release et y attacher le .zip
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-flet.txt pyinstaller
+
+      # Sur un tag, fige la version affichée dans « À propos » (ex. v1.0.0 -> 1.0.0).
+      # TAG vient de l'environnement (pas d'interpolation ${{ }} dans le run).
+      - name: Injecter la version du tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $v = $env:TAG -replace '^v', ''
+          (Get-Content interface_flet.py) `
+            -replace '_BAKED_VERSION = "[^"]*"', "_BAKED_VERSION = ""$v""" `
+            | Set-Content interface_flet.py
+
+      # Réplique de la commande `pack` de build-flet.bat (via `flet pack`,
+      # qui embarque PyInstaller + le client Flet). Sortie : dist/SuiviLoyers.exe.
+      - name: Construire l'exécutable (Flet)
+        run: >
+          flet pack interface_flet.py
+          --name SuiviLoyers
+          --product-name "Suivi des loyers"
+          --hidden-import yaml
+          --hidden-import openpyxl
+
+      # L'exe + une notice sont zippés : le .zip se télécharge sans blocage et
+      # embarque le mode d'emploi (dont le contournement SmartScreen).
+      - name: Empaqueter l'archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path SuiviLoyers | Out-Null
+          Copy-Item dist/SuiviLoyers.exe SuiviLoyers/
+          Copy-Item .github/LISEZ-MOI.txt SuiviLoyers/
+          Compress-Archive -Path SuiviLoyers/* -DestinationPath SuiviLoyers-windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SuiviLoyers-windows
+          path: SuiviLoyers-windows.zip
+
+      # Release seulement sur tag. `--generate-notes` bâtit le changelog depuis
+      # les commits ; GITHUB_REF_NAME est passé par l'environnement (pas
+      # d'interpolation ${{ }} dans la commande) pour éviter toute injection.
+      - name: Publier la Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create $env:GITHUB_REF_NAME SuiviLoyers-windows.zip
+          --title $env:GITHUB_REF_NAME --generate-notes

@@ -1,0 +1,31 @@
+Suivi des loyers — application Windows
+======================================
+
+Contenu de cette archive :
+  - SuiviLoyers.exe   : l'application (double-cliquez pour la lancer)
+  - LISEZ-MOI.txt     : ce fichier
+
+Premier lancement : l'avertissement bleu de Windows
+---------------------------------------------------
+Au tout premier double-clic, Windows peut afficher une fenêtre bleue :
+
+    « Windows a protégé votre ordinateur »
+    « Windows Defender SmartScreen a empêché le démarrage d'une
+      application non reconnue. »
+
+C'est normal : l'application est récente et n'est pas signée par un
+éditeur commercial. Elle est parfaitement sûre. Pour la lancer :
+
+    1. Cliquez sur « Informations complémentaires ».
+    2. Cliquez sur le bouton « Exécuter quand même ».
+
+Windows ne le redemandera plus pour cette version.
+
+Astuce : vous pouvez aussi faire un clic droit sur SuiviLoyers.exe →
+Propriétés → cocher « Débloquer » en bas → OK, avant de le lancer.
+
+Utilisation
+-----------
+L'application s'ouvre directement, sans installation. Vous pouvez
+déplacer SuiviLoyers.exe où vous voulez (Bureau, Documents…) et créer
+un raccourci.
