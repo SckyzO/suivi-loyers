@@ -26,8 +26,28 @@ import generer_suivi_loyers as moteur
 
 APP_TITRE = "Suivi des loyers"
 APP_SOUS_TITRE = "Générateur de classeur Excel — un fichier par bailleur"
-APP_VERSION = "0.1.0"
-GITHUB_URL = ""   # placeholder (dépôt à créer) -> bouton désactivé tant que vide
+GITHUB_URL = "https://github.com/SckyzO/suivi-loyers"  # bouton « Voir sur GitHub »
+
+# Version affichée dans « À propos », résolue dynamiquement (jamais un littéral à
+# bumper à la main) : figée au build CI (le workflow réécrit _BAKED_VERSION car
+# l'exe gelé n'a pas git), sinon dérivée du tag git en dev, sinon « dev ».
+_BAKED_VERSION = ""  # réécrit au build par le workflow (ex. "1.0.0")
+
+
+def _resolve_version() -> str:
+    if _BAKED_VERSION:
+        return _BAKED_VERSION
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ["git", "describe", "--tags", "--always", "--dirty"],
+            cwd=Path(__file__).resolve().parent, stderr=subprocess.DEVNULL)
+        return out.decode().strip().lstrip("v")
+    except Exception:
+        return "dev"
+
+
+APP_VERSION = _resolve_version()
 
 # Échelle typographique unique (homogénéité). DISPLAY=titre appli, TITRE=section
 # principale, SECTION=en-têtes majuscules, LABEL=libellés/sous-titres, CORPS=
