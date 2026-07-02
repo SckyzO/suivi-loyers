@@ -3,7 +3,8 @@ REM ===================================================================
 REM  POC : construit l'executable Windows de l'interface Flet.
 REM  Produit dist\SuiviLoyers.exe (un seul .exe, double-clic).
 REM  Build via `flet pack` (PyInstaller + client Flet embarque).
-REM  Prerequis : Python 3.10+ (https://www.python.org/downloads/).
+REM  Prerequis : Python 3.10+ (https://www.python.org/downloads/)
+REM             et uv (https://docs.astral.sh/uv/ ; `pip install uv`).
 REM  N'affecte PAS build.bat (interface Tkinter) : les deux coexistent.
 REM
 REM  Affichage : un spinner par etape (sortie masquee). Pour voir le
@@ -103,13 +104,15 @@ exit /b %EC%
 
 REM --- Etapes : les commandes reelles ----------------------------------
 :do_venv
-python -m venv .buildenv-flet || exit /b 1
+REM --clear : repart d'un environnement vierge a chaque build. Sans ca, un
+REM flet_desktop d'une version precedente subsiste et casse `flet pack`
+REM (cannot import name 'ensure_client_cached' from 'flet_desktop').
+uv venv --clear .buildenv-flet || exit /b 1
 exit /b 0
 
 :do_deps
 call .buildenv-flet\Scripts\activate.bat || exit /b 1
-python -m pip install --upgrade pip || exit /b 1
-pip install -r requirements-flet.txt pyinstaller || exit /b 1
+uv pip install -r requirements-flet.txt pyinstaller || exit /b 1
 exit /b 0
 
 :do_pack

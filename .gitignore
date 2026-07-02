@@ -8,6 +8,7 @@ build/
 dist/
 *.spec
 .buildenv/
+.buildenv-flet/
 
 # Environnements / caches Python
 .venv/
