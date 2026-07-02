@@ -139,7 +139,7 @@ def champ_liste(options, valeur=None, label="", expand=False,
         focused_border_color=ft.Colors.PRIMARY, text_size=15, dense=True,
         content_padding=ft.padding.symmetric(12, 14),
         label_style=ft.TextStyle(size=TS_LABEL, color=C_MUTED),
-        options=[ft.dropdown.Option(o) for o in options])
+        options=[ft.DropdownOption(o) for o in options])
 
 
 def titre_section(texte: str, icone=None) -> ft.Control:
@@ -184,7 +184,7 @@ class ChampDate(ft.Container):
             courant = dt.date.fromisoformat((self._champ.value or "").strip())
         except ValueError:
             courant = None
-        self.page.open(ft.DatePicker(
+        self.page.show_dialog(ft.DatePicker(
             first_date=dt.date(2000, 1, 1), last_date=dt.date(2100, 12, 31),
             value=courant, on_change=self._choisir))
 
@@ -355,13 +355,13 @@ class DialogueLocataire:
         self.observation.update()
 
     def ouvrir(self):
-        self.page.open(self.dlg)
+        self.page.show_dialog(self.dlg)
 
     def _fermer(self, _):
-        self.page.close(self.dlg)
+        self.page.pop_dialog()
 
     def _erreur(self, msg: str):
-        self.page.open(ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.ERROR))
+        self.page.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.ERROR))
 
     def _valider(self, _):
         nom = self.nom.value.strip()
@@ -395,7 +395,7 @@ class DialogueLocataire:
         data["observation"] = (self.observation.value or "").strip() if parti else ""
         data["mode_paiement"] = (self.mode_paiement.value or "").strip()
         data["jour_echeance"] = (self.jour_echeance.value or "").strip()
-        self.page.close(self.dlg)
+        self.page.pop_dialog()
         self.on_valider(data)
 
 
@@ -780,15 +780,15 @@ class AppLoyers:
             alignment=ft.alignment.center, expand=True)
 
     # --- charger / enregistrer config -------------------------------------
-    def _charger_config(self, _):
-        self._fp_open.pick_files(
+    async def _charger_config(self, _):
+        # Flet 0.80+ : pick_files est une coroutine qui renvoie la sélection,
+        # au lieu de l'ancien callback on_result.
+        fichiers = await self._fp.pick_files(
             dialog_title="Charger une configuration",
             allowed_extensions=["json", "yaml", "yml"], allow_multiple=False)
-
-    def _on_open_result(self, e: ft.FilePickerResultEvent):
-        if not e.files:
+        if not fichiers:
             return
-        p = Path(e.files[0].path)
+        p = Path(fichiers[0].path)
         try:
             if p.suffix.lower() in (".yaml", ".yml"):
                 import yaml
@@ -835,15 +835,13 @@ class AppLoyers:
         self._appliquer_apparence()
         self._rafraichir_table()
 
-    def _enregistrer_config(self, _):
-        self._fp_save_cfg.save_file(
+    async def _enregistrer_config(self, _):
+        chemin = await self._fp.save_file(
             dialog_title="Enregistrer la configuration",
             file_name="config_loyers.json", allowed_extensions=["json"])
-
-    def _on_save_cfg(self, e: ft.FilePickerResultEvent):
-        if not e.path:
+        if not chemin:
             return
-        p = Path(e.path)
+        p = Path(chemin)
         if p.suffix.lower() != ".json":
             p = p.with_suffix(".json")
         try:
@@ -855,7 +853,7 @@ class AppLoyers:
         self._toast(f"Configuration enregistrée : {p.name}")
 
     # --- génération du classeur -------------------------------------------
-    def _generer(self, _):
+    async def _generer(self, _):
         try:
             cfg = moteur.valider_config(self._config())
         except Exception as exc:  # noqa: BLE001 — erreurs de validation -> UI
@@ -863,14 +861,12 @@ class AppLoyers:
             return
         self._cfg_valide = cfg
         defaut = "Suivi_" + (moteur.base_slug(cfg["bailleur"]) or "bailleur") + ".xlsx"
-        self._fp_xlsx.save_file(
+        chemin = await self._fp.save_file(
             dialog_title="Générer le classeur", file_name=defaut,
             allowed_extensions=["xlsx"])
-
-    def _on_save_xlsx(self, e: ft.FilePickerResultEvent):
-        if not e.path:
+        if not chemin:
             return
-        sortie = Path(e.path)
+        sortie = Path(chemin)
         if sortie.suffix.lower() != ".xlsx":
             sortie = sortie.with_suffix(".xlsx")
         self._btn_generer.disabled = True
@@ -894,8 +890,8 @@ class AppLoyers:
         self._toast(msg, ok=ok)
 
     def _toast(self, msg: str, ok: bool = True):
-        self.page.open(ft.SnackBar(ft.Text(msg),
-                                   bgcolor=None if ok else ft.Colors.ERROR))
+        self.page.show_dialog(ft.SnackBar(ft.Text(msg),
+                                          bgcolor=None if ok else ft.Colors.ERROR))
         self.page.update()
 
     def _aide(self, texte: str) -> ft.Control:
@@ -952,11 +948,11 @@ class AppLoyers:
             content=contenu,
             actions=[ft.TextButton(
                 "Fermer", style=STYLE_BTN,
-                on_click=lambda e: self.page.close(self._dlg_reglages))],
+                on_click=lambda e: self.page.pop_dialog())],
             actions_alignment=ft.MainAxisAlignment.END)
 
     def _ouvrir_reglages(self, _):
-        self.page.open(self._dlg_reglages)
+        self.page.show_dialog(self._dlg_reglages)
 
     def _ouvrir_github(self, _):
         if GITHUB_URL:
@@ -1101,10 +1097,10 @@ class AppLoyers:
             border=ft.border.only(top=ft.BorderSide(1, C_LINE)))
 
     def _construire(self) -> ft.Control:
-        self._fp_open = ft.FilePicker(on_result=self._on_open_result)
-        self._fp_save_cfg = ft.FilePicker(on_result=self._on_save_cfg)
-        self._fp_xlsx = ft.FilePicker(on_result=self._on_save_xlsx)
-        self.page.overlay.extend([self._fp_open, self._fp_save_cfg, self._fp_xlsx])
+        # Flet 0.80+ : le FilePicker est un service (page.services), plus un
+        # overlay ; un seul suffit car pick_files/save_file renvoient le résultat.
+        self._fp = ft.FilePicker()
+        self.page.services.append(self._fp)
         self._build_reglages()
 
         corps = ft.Row([self._sidebar(), self._zone_principale()],
@@ -1119,4 +1115,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(main)
+    ft.run(main)

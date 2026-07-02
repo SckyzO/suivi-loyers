@@ -1,7 +1,8 @@
-# Dépendances du POC d'interface Flet (interface_flet.py).
+# Dépendances de l'interface Flet (interface_flet.py).
 # Séparé de requirements.txt (Tkinter) tant que la bascule n'est pas validée.
-# Flet 0.28.3 = dernière version de la lignée d'API « classique » (la 0.80+ est
-# une réécriture majeure, à évaluer plus tard).
-flet==0.28.3
+# Flet 0.85.x = lignée d'API « rewrite » (1.0-alpha) : FilePicker devenu service
+# + coroutines, dialogues via page.show_dialog/pop_dialog. `flet pack` (PyInstaller)
+# reste disponible, la chaîne de build est inchangée.
+flet==0.85.3
 openpyxl==3.1.5
 PyYAML==6.0.3
