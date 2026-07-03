@@ -50,6 +50,7 @@ jobs:
           --product-name "Suivi des loyers"
           --hidden-import yaml
           --hidden-import openpyxl
+          --pyinstaller-build-args="--log-level=WARN"
 
       # L'exe + une notice sont zippés : le .zip se télécharge sans blocage et
       # embarque le mode d'emploi (dont le contournement SmartScreen).

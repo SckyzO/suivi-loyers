@@ -92,12 +92,12 @@ REM --- Etapes : les commandes reelles ----------------------------------
 REM --clear : repart d'un environnement vierge a chaque build. Sans ca, un
 REM flet_desktop d'une version precedente subsiste et casse `flet pack`
 REM (cannot import name 'ensure_client_cached' from 'flet_desktop').
-uv venv --clear .buildenv-flet || exit /b 1
+uv venv -q --clear .buildenv-flet || exit /b 1
 exit /b 0
 
 :do_deps
 call .buildenv-flet\Scripts\activate.bat || exit /b 1
-uv pip install -r requirements-flet.txt pyinstaller || exit /b 1
+uv pip install -q -r requirements-flet.txt pyinstaller || exit /b 1
 exit /b 0
 
 :do_pack
@@ -105,11 +105,13 @@ call .buildenv-flet\Scripts\activate.bat || exit /b 1
 REM Nettoyage prealable : evite l'invite PyInstaller "supprimer build/dist ?".
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
+REM --log-level=WARN : coupe les ~90 lignes INFO de PyInstaller (sortie propre).
 flet pack interface_flet.py ^
   --name SuiviLoyers ^
   --product-name "Suivi des loyers" ^
   --hidden-import yaml ^
-  --hidden-import openpyxl || exit /b 1
+  --hidden-import openpyxl ^
+  --pyinstaller-build-args="--log-level=WARN" || exit /b 1
 exit /b 0
 
 
