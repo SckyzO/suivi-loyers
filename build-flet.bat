@@ -27,8 +27,10 @@ tasklist /FI "IMAGENAME eq SuiviLoyers.exe" 2>NUL | find /I "SuiviLoyers.exe" >N
 if errorlevel 1 goto :build_start
 echo.
 echo L'application SuiviLoyers.exe est actuellement ouverte.
-set /p REP=La fermer maintenant ? (O/N) :
-if /I "%REP%"=="O" (
+REM Defaut = Oui (Entree ferme) ; accepte O/Oui/N/Non (on teste la 1re lettre).
+set "REP=O"
+set /p REP=La fermer maintenant ? (Oui/Non) [Oui] :
+if /I "%REP:~0,1%"=="O" (
   REM /T tue l'arbre de process (l'exe onefile lance un bootloader + l'app).
   taskkill /IM SuiviLoyers.exe /F /T >NUL 2>&1
   timeout /t 2 /nobreak >NUL
@@ -53,9 +55,10 @@ echo ===================================================================
 echo  Termine. L'executable se trouve ici : dist\SuiviLoyers.exe
 echo ===================================================================
 echo.
-set REP=O
-set /p REP=Lancer l'application maintenant ? (O/N) [O] :
-if /I not "%REP%"=="N" start "" "dist\SuiviLoyers.exe"
+REM Defaut = Oui ; accepte O/Oui/N/Non (on teste la 1re lettre).
+set "REP=O"
+set /p REP=Lancer l'application maintenant ? (Oui/Non) [Oui] :
+if /I not "%REP:~0,1%"=="N" start "" "dist\SuiviLoyers.exe"
 exit /b 0
 
 
