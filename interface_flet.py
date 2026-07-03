@@ -17,6 +17,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+import os
+import re
 import threading
 from pathlib import Path
 
@@ -48,6 +50,43 @@ def _resolve_version() -> str:
 
 
 APP_VERSION = _resolve_version()
+
+# --- Réglages persistants + vérification de mise à jour ---------------------
+GITHUB_API_LATEST = "https://api.github.com/repos/SckyzO/suivi-loyers/releases/latest"
+
+
+def _fichier_reglages() -> Path:
+    """settings.json par utilisateur (APPDATA sous Windows, ~/.config sinon)."""
+    base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".config")
+    return Path(base) / "SuiviLoyers" / "settings.json"
+
+
+def _charger_reglages() -> dict:
+    try:
+        return json.loads(_fichier_reglages().read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — absent/illisible -> réglages par défaut
+        return {}
+
+
+def _enregistrer_reglages(data: dict) -> None:
+    try:
+        f = _fichier_reglages()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — best-effort, un échec ne bloque pas l'appli
+        pass
+
+
+def _version_tuple(v: str) -> tuple:
+    """« v1.2.3 » / « 1.2.3-dirty » -> (1, 2, 3) ; « dev » -> ()."""
+    return tuple(int(n) for n in re.findall(r"\d+", v or "")[:3])
+
+
+def _maj_disponible(courante: str, derniere: str) -> bool:
+    """True si le tag `derniere` est strictement plus récent que `courante`."""
+    tc, td = _version_tuple(courante), _version_tuple(derniere)
+    return bool(tc and td and td > tc)
+
 
 # Échelle typographique unique (homogénéité). DISPLAY=titre appli, TITRE=section
 # principale, SECTION=en-têtes majuscules, LABEL=libellés/sous-titres, CORPS=
@@ -412,6 +451,8 @@ class AppLoyers:
         self._recherche = ""          # filtre texte de la table
         self._tri_cle = "nom"         # colonne de tri active
         self._tri_asc = True          # sens du tri
+        self._reglages = _charger_reglages()
+        self._maj_active = bool(self._reglages.get("verifier_maj", True))
         page.title = APP_TITRE
         page.window.width = 1180
         page.window.height = 800
@@ -421,6 +462,8 @@ class AppLoyers:
         self._appliquer_apparence()
         page.add(self._construire())
         self._rafraichir_table()
+        if self._maj_active:
+            self._verifier_maj()
 
     # --- thème / apparence -------------------------------------------------
     def _theme_id_courant(self) -> str:
@@ -919,7 +962,6 @@ class AppLoyers:
         self.page.update()
 
     def _ouvrir_dossier(self, sortie: Path):
-        import os
         import subprocess
         import sys
         dossier = str(sortie.resolve().parent)
@@ -974,7 +1016,10 @@ class AppLoyers:
         lien_gh = ft.OutlinedButton(
             "Voir sur GitHub", icon=ft.Icons.CODE, style=STYLE_BTN,
             on_click=self._ouvrir_github, disabled=not GITHUB_URL)
-        contenu = ft.Container(width=420, height=430, content=ft.Column([
+        self._maj_switch = ft.Switch(
+            label="Vérifier les mises à jour au démarrage",
+            value=self._maj_active, on_change=self._toggle_maj)
+        contenu = ft.Container(width=420, height=490, content=ft.Column([
             titre_section("Apparence de l'application",
                           ft.Icons.BRIGHTNESS_6_OUTLINED),
             rangee_apparence,
@@ -983,6 +1028,7 @@ class AppLoyers:
             titre_section("À propos", ft.Icons.INFO_OUTLINE),
             ft.Text(f"{APP_TITRE} — version {APP_VERSION}", size=TS_CORPS,
                     weight=ft.FontWeight.W_500),
+            self._maj_switch,
             lien_gh,
         ], spacing=12, tight=True, scroll=ft.ScrollMode.AUTO))
         self._dlg_reglages = ft.AlertDialog(
@@ -1001,6 +1047,39 @@ class AppLoyers:
     def _ouvrir_github(self, _):
         if GITHUB_URL:
             self.page.launch_url(GITHUB_URL)
+
+    # --- vérification de mise à jour --------------------------------------
+    def _verifier_maj(self):
+        """Interroge GitHub en tâche de fond ; notifie si une version plus
+        récente existe. Silencieux hors-ligne (aucune erreur remontée à l'UI)."""
+        def worker():
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    GITHUB_API_LATEST,
+                    headers={"Accept": "application/vnd.github+json",
+                             "User-Agent": "SuiviLoyers"})
+                with urllib.request.urlopen(req, timeout=6) as r:
+                    data = json.loads(r.read().decode("utf-8"))
+                tag = (data.get("tag_name") or "").lstrip("v")
+                url = data.get("html_url") or GITHUB_URL
+                if _maj_disponible(APP_VERSION, tag):
+                    self._notifier_maj(tag, url)
+            except Exception:  # noqa: BLE001 — hors-ligne / API indispo -> silencieux
+                pass
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _notifier_maj(self, version: str, url: str):
+        self.page.show_dialog(ft.SnackBar(
+            ft.Text(f"Une nouvelle version ({version}) est disponible."),
+            action="Télécharger", on_action=lambda e: self.page.launch_url(url),
+            show_close_icon=True, duration=12000))
+        self.page.update()
+
+    def _toggle_maj(self, e):
+        self._maj_active = bool(self._maj_switch.value)
+        self._reglages["verifier_maj"] = self._maj_active
+        _enregistrer_reglages(self._reglages)
 
     def _entete(self) -> ft.Control:
         marque = ft.Container(
