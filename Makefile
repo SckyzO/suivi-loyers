@@ -22,8 +22,8 @@ EXEMPLES := exemples
 # Exécuter les conteneurs avec l'UID/GID courant : pas de fichiers créés en root.
 USERFLAG := --user $(shell id -u):$(shell id -g)
 
-# Fichiers source synchronisés côté Windows (pour builder l'.exe via build.bat).
-SRC := generer_suivi_loyers.py interface.py build.bat requirements.txt \
+# Fichiers source synchronisés côté Windows (pour builder l'.exe via build-flet.bat).
+SRC := generer_suivi_loyers.py requirements.txt \
        interface_flet.py build-flet.bat requirements-flet.txt \
        Dockerfile docker-compose.yml Makefile README.md CLAUDE.md .gitignore
 
@@ -33,7 +33,7 @@ SRC := generer_suivi_loyers.py interface.py build.bat requirements.txt \
 all: build lint gen test sync ## Workflow complet de fin de modification
 
 lint: ## Lint ruff (bugs/style) via l'image officielle — config dans ruff.toml
-	docker run --rm -v "$(CURDIR):/app" -w /app $(RUFF) check generer_suivi_loyers.py interface_flet.py interface.py tests
+	docker run --rm -v "$(CURDIR):/app" -w /app $(RUFF) check generer_suivi_loyers.py interface_flet.py tests
 
 build: ## Construit l'image Docker
 	docker build -t $(IMAGE) .
@@ -49,7 +49,7 @@ test: build ## Smoke test du moteur (structure, modularité, préservation)
 
 sync: sync-win sync-exemples ## Synchronise source + exemples vers Windows
 
-sync-win: ## Copie le code à jour dans le dossier Windows (pour build.bat)
+sync-win: ## Copie le code à jour dans le dossier Windows (pour build-flet.bat)
 	@if [ -d "$(DOWNLOADS)" ]; then \
 	  mkdir -p "$(WIN_PROJECT)/configs"; \
 	  cp $(SRC) "$(WIN_PROJECT)/"; \

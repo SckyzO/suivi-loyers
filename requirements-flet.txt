@@ -1,5 +1,5 @@
 # Dépendances de l'interface Flet (interface_flet.py).
-# Séparé de requirements.txt (Tkinter) tant que la bascule n'est pas validée.
+# Séparé de requirements.txt (deps du moteur openpyxl/PyYAML, hors UI).
 # Flet 0.85.x = lignée d'API « rewrite » (1.0-alpha) : FilePicker devenu service
 # + coroutines, dialogues via page.show_dialog/pop_dialog. `flet pack` (PyInstaller)
 # reste disponible, la chaîne de build est inchangée.

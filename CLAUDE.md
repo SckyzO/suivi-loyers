@@ -6,18 +6,18 @@ interface graphique pour un usage non technique sous Windows.
 ## Public et contraintes
 
 - **Utilisatrice finale** : non technicienne, sous Windows. Elle ne lance que l'`.exe`, jamais
-  Python. Toute l'ergonomie passe par `interface.py`.
+  Python. Toute l'ergonomie passe par `interface_flet.py`.
 - **Mainteneur** : sous WSL, **tout en Docker** (pas de venv local). Le `.exe` se construit
-  côté Windows avec `build.bat` (PyInstaller n'est pas multi-plateforme).
+  côté Windows avec `build-flet.bat` (PyInstaller n'est pas multi-plateforme).
 - **Langue** : interface, classeur généré et documentation en **français** (audience française).
 
 ## Architecture
 
 Deux couches, à garder séparées :
 
-- `generer_suivi_loyers.py` : **moteur** pur (openpyxl), sans dépendance à Tkinter.
+- `generer_suivi_loyers.py` : **moteur** pur (openpyxl), sans dépendance à l'interface (Flet).
   Construit le classeur à partir d'une config validée. Réutilisable en CLI / Docker.
-- `interface.py` : **surcouche graphique** (Tkinter). Ne contient pas de logique de
+- `interface_flet.py` : **surcouche graphique** (Flet). Ne contient pas de logique de
   construction ; elle assemble une config et appelle `moteur.generer_workbook`.
 
 Point d'entrée commun : `valider_config(dict) -> cfg`, utilisé par le YAML (`charger_config`)
@@ -97,13 +97,13 @@ make sync       # code -> dossier Windows, xlsx -> ~/Downloads
 ```
 
 Le lint (`ruff.toml`) volontairement n'impose ni la longueur de ligne (E501) ni le tri d'imports
-(isort) : wrapping et regroupement sont manuels. `interface.py` tolère les one-liners `;` (E702).
+(isort) : wrapping et regroupement sont manuels.
 
 Le smoke test (`tests/smoke.py`) valide systématiquement : modularité (pas de colonne CAF en
 config minimale), période d'activité (rotation), et reprise des saisies après ajout d'un
 locataire. Tout fichier à visualiser doit finir dans `~/Downloads` (cf. mémoire projet).
 
-Un hook git `post-commit` relance `make sync-win` à chaque commit pour que `build.bat` parte
+Un hook git `post-commit` relance `make sync-win` à chaque commit pour que `build-flet.bat` parte
 toujours de la dernière version côté Windows.
 
 ## Compatibilité des configs (anciennes versions)

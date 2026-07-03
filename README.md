@@ -100,9 +100,9 @@ suivi que sur ses mois de présence.
 
 L'`.exe` se construit sous Windows.
 
-1. Installez [Python](https://www.python.org/downloads/) (3.10 ou plus). À l'installation,
-   cochez **« Add Python to PATH »**.
-2. Double-cliquez sur `build.bat`.
+1. Installez [Python](https://www.python.org/downloads/) (3.10 ou plus, cochez
+   **« Add Python to PATH »**) et [uv](https://docs.astral.sh/uv/) (`pip install uv`).
+2. Double-cliquez sur `build-flet.bat`.
 3. À la fin, l'exécutable se trouve dans `dist\SuiviLoyers.exe`. Copiez-le où vous voulez ;
    il fonctionne seul, sans Python.
 
@@ -124,7 +124,7 @@ docker compose run --rm suivi configs/minimal.yaml exemples
 ```
 
 Le moteur (`generer_suivi_loyers.py`) lit une config et écrit le `.xlsx`. L'interface
-(`interface.py`) est une surcouche graphique qui appelle ce même moteur. Les formules sont
+(`interface_flet.py`, Flet) est une surcouche graphique qui appelle ce même moteur. Les formules sont
 écrites avec les noms de fonctions anglais (`SUMIFS`, `VLOOKUP`, `IF`) : Excel les affiche en
 français et LibreOffice les lit sans souci.
 
@@ -133,8 +133,8 @@ français et LibreOffice les lit sans souci.
 | Fichier | Rôle |
 |---|---|
 | `generer_suivi_loyers.py` | Moteur : construit le classeur à partir d'une config. |
-| `interface.py` | Interface graphique (Tkinter) pour l'utilisateur final. |
-| `build.bat` | Construit `SuiviLoyers.exe` sous Windows (PyInstaller). |
+| `interface_flet.py` | Interface graphique (Flet) pour l'utilisateur final. |
+| `build-flet.bat` | Construit `SuiviLoyers.exe` sous Windows (PyInstaller + `flet pack`). |
 | `configs/` | Exemples de configurations (`exemple.yaml`, `minimal.yaml`). |
 | `Dockerfile`, `docker-compose.yml` | Environnement de test du moteur. |
 | `requirements.txt` | Dépendances Python (openpyxl, PyYAML). |

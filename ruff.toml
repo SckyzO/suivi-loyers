@@ -9,8 +9,3 @@
 
 [lint]
 select = ["E4", "E7", "E9", "F", "W", "B"]
-
-[lint.per-file-ignores]
-# interface.py (UI Tkinter) : one-liners « libelle(); entree() » volontairement
-# compacts pour la densité du formulaire — E702 toléré ici uniquement.
-"interface.py" = ["E702"]

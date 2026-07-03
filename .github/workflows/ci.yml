@@ -1,7 +1,7 @@
 name: CI
 
 # Lint + smoke test du moteur sur chaque push/PR. Tourne sous Linux (le moteur
-# n'a aucune dépendance Tkinter), donc rapide et testable en local avec `act`.
+# n'a aucune dépendance à l'interface graphique), donc rapide et testable avec `act`.
 on:
   push:
     branches: [main]
@@ -25,7 +25,7 @@ jobs:
           pip install -r requirements.txt ruff==0.15.20
 
       - name: Lint (ruff)
-        run: ruff check generer_suivi_loyers.py interface.py interface_flet.py tests
+        run: ruff check generer_suivi_loyers.py interface_flet.py tests
 
       - name: Smoke test du moteur
         # PYTHONPATH=racine : smoke.py importe le moteur (comme `make test`).
