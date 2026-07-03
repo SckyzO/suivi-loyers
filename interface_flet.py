@@ -337,7 +337,7 @@ class DialogueLocataire:
         # Hauteur bornée + colonnes défilantes : le dialogue ne déborde jamais,
         # quel que soit le nombre de champs actifs selon les modules.
         return ft.Container(
-            width=720, height=520,
+            width=720, height=600,
             content=ft.Row([
                 ft.Container(gauche, width=334),
                 ft.VerticalDivider(width=1, color=C_LINE),
@@ -434,14 +434,18 @@ class AppLoyers:
         # text_theme : épaissit TOUT le texte par défaut (switches, table, libellés…),
         # pas seulement les champs. Les titres gardent leur poids explicite (W_700+).
         w5 = ft.FontWeight.W_500
+        # color=ON_SURFACE explicite : en 0.85, un TextStyle de text_theme sans
+        # couleur n'hérite plus du schéma clair -> texte blanc en thème clair. Le
+        # token ON_SURFACE s'adapte à la luminosité (sombre en clair, clair en sombre).
+        c = ft.Colors.ON_SURFACE
         return ft.Theme(
             color_scheme_seed=seed,
             text_theme=ft.TextTheme(
-                body_large=ft.TextStyle(size=15, weight=w5),
-                body_medium=ft.TextStyle(size=14, weight=w5),
-                body_small=ft.TextStyle(size=13, weight=w5),
-                label_large=ft.TextStyle(size=14, weight=w5),
-                label_medium=ft.TextStyle(size=13, weight=w5)))
+                body_large=ft.TextStyle(size=15, weight=w5, color=c),
+                body_medium=ft.TextStyle(size=14, weight=w5, color=c),
+                body_small=ft.TextStyle(size=13, weight=w5, color=c),
+                label_large=ft.TextStyle(size=14, weight=w5, color=c),
+                label_medium=ft.TextStyle(size=13, weight=w5, color=c)))
 
     def _appliquer_apparence(self):
         self.page.theme_mode = APPARENCE_MODE[self.apparence]
@@ -884,12 +888,50 @@ class AppLoyers:
                 sortie.with_suffix(".json").write_text(
                     json.dumps(self._config(), ensure_ascii=False, indent=2),
                     encoding="utf-8")
-            msg, ok = f"Classeur généré : {sortie.name}", True
+            ok, msg = True, None
         except Exception as exc:  # noqa: BLE001
-            msg, ok = f"Échec de la génération : {exc}", False
+            ok, msg = False, f"Échec de la génération : {exc}"
         self._btn_generer.disabled = False
         self._btn_generer.text = "Générer le classeur"
-        self._toast(msg, ok=ok)
+        if ok:
+            self._demander_ouvrir_dossier(sortie)
+        else:
+            self._toast(msg, ok=False)
+
+    def _demander_ouvrir_dossier(self, sortie: Path):
+        """Classeur généré : propose d'ouvrir le dossier qui le contient."""
+        def ouvrir(_):
+            self.page.pop_dialog()
+            self._ouvrir_dossier(sortie)
+        dlg = ft.AlertDialog(
+            modal=True, shape=ft.RoundedRectangleBorder(radius=18),
+            bgcolor=ft.Colors.SURFACE,
+            title=ft.Text("Classeur généré", weight=ft.FontWeight.W_700),
+            content=ft.Text(f"« {sortie.name} » a été créé.\n"
+                            "Ouvrir le dossier qui le contient ?"),
+            actions=[
+                ft.TextButton("Fermer", style=STYLE_BTN,
+                              on_click=lambda e: self.page.pop_dialog()),
+                ft.FilledButton("Ouvrir le dossier", icon=ft.Icons.FOLDER_OPEN,
+                                style=STYLE_BTN, on_click=ouvrir),
+            ], actions_alignment=ft.MainAxisAlignment.END)
+        self.page.show_dialog(dlg)
+        self.page.update()
+
+    def _ouvrir_dossier(self, sortie: Path):
+        import os
+        import subprocess
+        import sys
+        dossier = str(sortie.resolve().parent)
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(dossier)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", dossier])
+            else:
+                subprocess.Popen(["xdg-open", dossier])
+        except Exception as exc:  # noqa: BLE001
+            self._toast(f"Impossible d'ouvrir le dossier : {exc}", ok=False)
 
     def _toast(self, msg: str, ok: bool = True):
         self.page.show_dialog(ft.SnackBar(ft.Text(msg),
@@ -932,7 +974,7 @@ class AppLoyers:
         lien_gh = ft.OutlinedButton(
             "Voir sur GitHub", icon=ft.Icons.CODE, style=STYLE_BTN,
             on_click=self._ouvrir_github, disabled=not GITHUB_URL)
-        contenu = ft.Container(width=420, content=ft.Column([
+        contenu = ft.Container(width=420, height=430, content=ft.Column([
             titre_section("Apparence de l'application",
                           ft.Icons.BRIGHTNESS_6_OUTLINED),
             rangee_apparence,
@@ -942,7 +984,7 @@ class AppLoyers:
             ft.Text(f"{APP_TITRE} — version {APP_VERSION}", size=TS_CORPS,
                     weight=ft.FontWeight.W_500),
             lien_gh,
-        ], spacing=12, tight=True))
+        ], spacing=12, tight=True, scroll=ft.ScrollMode.AUTO))
         self._dlg_reglages = ft.AlertDialog(
             modal=True, shape=ft.RoundedRectangleBorder(radius=18),
             bgcolor=ft.Colors.SURFACE,
@@ -993,8 +1035,10 @@ class AppLoyers:
         self.b_iban = champ_texte(label="IBAN", expand=True,
                                   icone=ft.Icons.ACCOUNT_BALANCE_OUTLINED)
 
-        self.an_debut = champ_texte("2024", "Année de début", expand=True)
-        self.an_fin = champ_texte("2026", "Année de fin", expand=True)
+        # Défaut : année en cours -> année en cours + 2 (période de 3 ans).
+        annee = dt.date.today().year
+        self.an_debut = champ_texte(str(annee), "Année de début", expand=True)
+        self.an_fin = champ_texte(str(annee + 2), "Année de fin", expand=True)
 
         self.mode_charges = champ_liste(
             [lbl for _, lbl in MODES], MODE_LABEL["comprises"], "Mode de charges",
@@ -1014,7 +1058,10 @@ class AppLoyers:
                 ft.Row([self.b_sci, self.b_sci_nom], spacing=10,
                        vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 self.b_adresse,
-                ft.Row([self.b_tel, self.b_email], spacing=10),
+                # E-mail sur sa propre ligne (pleine largeur) : une adresse longue
+                # partagée avec le téléphone était tronquée.
+                self.b_tel,
+                self.b_email,
                 self.b_iban,
             ], icone=ft.Icons.PERSON_OUTLINE),
             ft.Divider(height=1, color=C_LINE),
@@ -1079,7 +1126,7 @@ class AppLoyers:
 
     def _pied(self) -> ft.Control:
         self._enregistrer_aussi = ft.Switch(label="Enregistrer la config à côté",
-                                            value=False)
+                                            value=True)
         self._btn_generer = ft.FilledButton(
             "Générer le classeur", icon=ft.Icons.TABLE_VIEW_ROUNDED,
             on_click=self._generer,
@@ -1091,7 +1138,10 @@ class AppLoyers:
                                   on_click=self._charger_config, style=STYLE_BTN),
                 ft.OutlinedButton("Enregistrer config", icon=ft.Icons.SAVE_OUTLINED,
                                   on_click=self._enregistrer_config, style=STYLE_BTN),
-                self._enregistrer_aussi,
+                self._avec_aide(
+                    self._enregistrer_aussi,
+                    "Écrit une copie de la configuration (.json) à côté du classeur "
+                    "généré, pour la recharger et régénérer le suivi plus tard."),
                 ft.Container(expand=True),
                 self._btn_generer,
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
