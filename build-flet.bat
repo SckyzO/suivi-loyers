@@ -7,17 +7,11 @@ REM  Prerequis : Python 3.10+ (https://www.python.org/downloads/)
 REM             et uv (https://docs.astral.sh/uv/ ; `pip install uv`).
 REM  N'affecte PAS build.bat (interface Tkinter) : les deux coexistent.
 REM
-REM  Affichage : un spinner par etape (sortie masquee). Pour voir le
-REM  detail complet des commandes, lancer :   build-flet.bat --debug
+REM  Affichage : une ligne "[OK]" par etape (sortie masquee -> journal, montre
+REM  seulement en cas d'echec). Detail complet :   build-flet.bat --debug
 REM ===================================================================
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d %~dp0
-
-REM --- Re-entree interne : execution d'une seule etape en arriere-plan ---
-if "%~1"=="__step" goto :__step
-
-REM --- Retour chariot (pour reecrire la ligne du spinner sur place) ------
-for /F %%a in ('copy /Z "%~f0" nul') do set "CR=%%a"
 
 REM --- Mode debug : --debug affiche toute la sortie des commandes --------
 set "DEBUG="
@@ -65,8 +59,9 @@ exit /b 0
 REM ===================================================================
 REM  :step  "Libelle"  nom_etape
 REM    debug  -> execute l'etape en clair (sortie visible).
-REM    sinon  -> lance l'etape en arriere-plan (sortie -> journal) et
-REM              anime un spinner ; en cas d'echec, affiche le journal.
+REM    sinon  -> execute l'etape en redirigeant TOUTE sa sortie (y compris
+REM              les sous-processus de flet pack) vers un journal, et n'affiche
+REM              ce journal qu'en cas d'echec. Sortie propre : une ligne [OK].
 REM ===================================================================
 :step
 set "LABEL=%~1"
@@ -77,32 +72,19 @@ if defined DEBUG (
   exit /b %errorlevel%
 )
 set "LOG=%TEMP%\suiviloyers_flet_%NAME%.log"
-set "RC=%TEMP%\suiviloyers_flet_%NAME%.rc"
-set "RUN=%TEMP%\suiviloyers_flet_%NAME%.cmd"
-del "%LOG%" "%RC%" "%RUN%" 2>NUL
-> "%RUN%" echo @call "%~f0" __step %NAME% ^> "%LOG%" 2^>^&1
-start "" /b cmd /c "%RUN%"
-call :spinner "%LABEL%" "%RC%"
-set "CODE=1"
-if exist "%RC%" set /p CODE=<"%RC%"
-del "%RUN%" 2>NUL
-if not "%CODE%"=="0" (
-  echo   [ECHEC] %LABEL%
+del "%LOG%" 2>NUL
+<nul set /p "=  %LABEL%... "
+REM Rediriger le `call` capture aussi la sortie des programmes qu'il lance.
+call :do_%NAME% > "%LOG%" 2>&1
+if errorlevel 1 (
+  echo [ECHEC]
   echo   ----- journal -------------------------------------------------
   if exist "%LOG%" type "%LOG%"
   echo   ---------------------------------------------------------------
   exit /b 1
 )
+echo [OK]
 exit /b 0
-
-
-REM --- Execution effective d'une etape (relancee en arriere-plan) -------
-:__step
-set "NAME=%~2"
-call :do_%NAME%
-set "EC=%errorlevel%"
-> "%TEMP%\suiviloyers_flet_%NAME%.rc" echo %EC%
-exit /b %EC%
 
 
 REM --- Etapes : les commandes reelles ----------------------------------
@@ -128,27 +110,6 @@ flet pack interface_flet.py ^
   --product-name "Suivi des loyers" ^
   --hidden-import yaml ^
   --hidden-import openpyxl || exit /b 1
-exit /b 0
-
-
-REM --- Spinner : tourne tant que le fichier .rc (fin d'etape) absent ----
-:spinner
-set "SLABEL=%~1"
-set "SRC=%~2"
-set "FRAMES=|/-\"
-set /a n=0
-:spin_loop
-if exist "%SRC%" goto :spin_done
-set /a fi=n %% 4
-for %%# in (!fi!) do set "ch=!FRAMES:~%%#,1!"
-<nul set /p "=  !ch!  !SLABEL!... !n!s    !CR!"
-set /a n+=1
-REM ~1 s sans dependre de stdin (timeout echoue si l'entree est redirigee).
-ping -n 2 127.0.0.1 >NUL
-goto :spin_loop
-:spin_done
-<nul set /p "=  [OK] !SLABEL!                                        !CR!"
-echo.
 exit /b 0
 
 
