@@ -126,7 +126,7 @@ def champ_texte(valeur="", label="", largeur=None, expand=False,
         border_color=ft.Colors.TRANSPARENT, prefix_icon=icone,
         focused_border_color=ft.Colors.PRIMARY, dense=True,
         text_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
-        content_padding=ft.padding.symmetric(12, 14),
+        content_padding=ft.Padding.symmetric(vertical=12, horizontal=14),
         label_style=ft.TextStyle(size=TS_LABEL, color=C_MUTED))
 
 
@@ -134,10 +134,10 @@ def champ_liste(options, valeur=None, label="", expand=False,
                 editable=False, largeur=None, icone=None) -> ft.Dropdown:
     return ft.Dropdown(
         label=label, value=valeur, expand=expand, width=largeur, filled=True,
-        bgcolor=C_FIELD, prefix_icon=icone,
+        bgcolor=C_FIELD, leading_icon=icone,
         border_radius=RAYON, border_color=ft.Colors.TRANSPARENT, editable=editable,
         focused_border_color=ft.Colors.PRIMARY, text_size=15, dense=True,
-        content_padding=ft.padding.symmetric(12, 14),
+        content_padding=ft.Padding.symmetric(vertical=12, horizontal=14),
         label_style=ft.TextStyle(size=TS_LABEL, color=C_MUTED),
         options=[ft.DropdownOption(o) for o in options])
 
@@ -149,7 +149,7 @@ def titre_section(texte: str, icone=None) -> ft.Control:
     ligne.append(ft.Text(texte.upper(), size=TS_SECTION, weight=ft.FontWeight.W_700,
                          color=C_MUTED, spans=None))
     return ft.Container(ft.Row(ligne, spacing=7, tight=True),
-                        margin=ft.margin.only(top=6, bottom=2))
+                        margin=ft.Margin.only(top=6, bottom=2))
 
 
 # ===========================================================================
@@ -164,19 +164,21 @@ class ChampDate(ft.Container):
     def __init__(self, page: ft.Page, valeur: str = "", actif: bool = True,
                  largeur=None):
         super().__init__()
-        self.page = page
+        # 0.85 : ft.Container.page est une propriété en lecture seule ; on garde
+        # notre propre référence pour ouvrir le DatePicker depuis un handler.
+        self._page = page
         self._champ = ft.TextField(
             value=valeur, hint_text="AAAA-MM-JJ", width=largeur, filled=True,
             bgcolor=C_FIELD,
             border_radius=RAYON, border_color=ft.Colors.TRANSPARENT,
             focused_border_color=ft.Colors.PRIMARY, dense=True,
             text_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
-            content_padding=ft.padding.symmetric(12, 14), disabled=not actif,
+            content_padding=ft.Padding.symmetric(vertical=12, horizontal=14), disabled=not actif,
             # Icône cliquable compacte (un IconButton gonflerait la hauteur du champ).
             suffix=ft.Container(
                 ft.Icon(ft.Icons.CALENDAR_MONTH, size=18, color=C_MUTED),
                 on_click=self._ouvrir, tooltip="Choisir une date",
-                padding=ft.padding.only(left=4, right=2)))
+                padding=ft.Padding.only(left=4, right=2)))
         self.content = self._champ
 
     def _ouvrir(self, _):
@@ -184,7 +186,7 @@ class ChampDate(ft.Container):
             courant = dt.date.fromisoformat((self._champ.value or "").strip())
         except ValueError:
             courant = None
-        self.page.show_dialog(ft.DatePicker(
+        self._page.show_dialog(ft.DatePicker(
             first_date=dt.date(2000, 1, 1), last_date=dt.date(2100, 12, 31),
             value=courant, on_change=self._choisir))
 
@@ -283,7 +285,7 @@ class DialogueLocataire:
         self.dlg = ft.AlertDialog(
             modal=True,
             shape=ft.RoundedRectangleBorder(radius=18),
-            bgcolor=ft.Colors.SURFACE, surface_tint_color=ft.Colors.TRANSPARENT,
+            bgcolor=ft.Colors.SURFACE,
             title=ft.Text("Locataire" if loc else "Nouveau locataire",
                           weight=ft.FontWeight.W_700),
             content=self._corps(),
@@ -459,8 +461,8 @@ class AppLoyers:
         carte = ft.Container(
             on_click=lambda e, k=cle: self._changer_apparence(k),
             border_radius=RAYON, expand=True, ink=True,
-            padding=ft.padding.symmetric(vertical=12, horizontal=8),
-            alignment=ft.alignment.center,
+            padding=ft.Padding.symmetric(vertical=12, horizontal=8),
+            alignment=ft.Alignment.CENTER,
             content=ft.Column(
                 [ft.Icon(APPARENCE_ICONE[cle], size=22),
                  ft.Text(label, size=TS_CORPS, weight=ft.FontWeight.W_500)],
@@ -474,7 +476,7 @@ class AppLoyers:
             actif = cle == self.apparence
             carte.bgcolor = (ft.Colors.PRIMARY_CONTAINER if actif
                              else ft.Colors.SURFACE_CONTAINER_HIGHEST)
-            carte.border = ft.border.all(
+            carte.border = ft.Border.all(
                 2, ft.Colors.PRIMARY if actif else ft.Colors.TRANSPARENT)
             coul = (ft.Colors.ON_PRIMARY_CONTAINER if actif
                     else ft.Colors.ON_SURFACE_VARIANT)
@@ -554,9 +556,9 @@ class AppLoyers:
         return ft.Container(
             ft.Text(texte, size=TS_PETIT, weight=ft.FontWeight.W_600, color=couleur,
                     no_wrap=True, text_align=ft.TextAlign.CENTER),
-            width=84, alignment=ft.alignment.center,
+            width=84, alignment=ft.Alignment.CENTER,
             bgcolor=ft.Colors.with_opacity(0.15, couleur),
-            padding=ft.padding.symmetric(4, 6), border_radius=20)
+            padding=ft.Padding.symmetric(vertical=4, horizontal=6), border_radius=20)
 
     # --- table custom (colonnes flexibles : remplit la largeur, vs DataTable
     #     qui se dimensionne à la largeur intrinsèque de ses colonnes) ---------
@@ -660,13 +662,13 @@ class AppLoyers:
                            else ft.MainAxisAlignment.START),
                 vertical_alignment=ft.CrossAxisAlignment.CENTER)
             cell = ft.Container(rang, expand=col["flex"],
-                                padding=ft.padding.symmetric(horizontal=10))
+                                padding=ft.Padding.symmetric(horizontal=10))
             if col.get("tri"):
                 cell.on_click = lambda e, c=col["cle"]: self._trier_par(c)
                 cell.ink, cell.border_radius, cell.tooltip = True, 8, "Trier"
             cells.append(cell)
         return ft.Container(ft.Row(cells, spacing=0), bgcolor=C_HEAD,
-                            padding=ft.padding.symmetric(vertical=12))
+                            padding=ft.Padding.symmetric(vertical=12))
 
     def _cellule(self, col: dict, loc: dict, orig_idx: int) -> ft.Control:
         cle, droite = col["cle"], col.get("droite", False)
@@ -711,16 +713,16 @@ class AppLoyers:
                 text_align=ft.TextAlign.RIGHT if droite else ft.TextAlign.LEFT,
                 tooltip=txt if cle == "adresse" and txt != "—" else None)
         aligne = None if isinstance(contenu, ft.Text) else (
-            ft.alignment.center_right if droite else ft.alignment.center_left)
+            ft.Alignment.CENTER_RIGHT if droite else ft.Alignment.CENTER_LEFT)
         return ft.Container(contenu, expand=col["flex"], alignment=aligne,
-                            padding=ft.padding.symmetric(horizontal=10))
+                            padding=ft.Padding.symmetric(horizontal=10))
 
     def _ligne(self, orig_idx: int, loc: dict) -> ft.Control:
         cells = [self._cellule(col, loc, orig_idx) for col in self._cols_courantes]
         return ft.Container(
             ft.Row(cells, spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=ft.padding.symmetric(vertical=8),
-            border=ft.border.only(bottom=ft.BorderSide(1, C_LINE)),
+            padding=ft.Padding.symmetric(vertical=8),
+            border=ft.Border.only(bottom=ft.BorderSide(1, C_LINE)),
             on_hover=self._hover_ligne)
 
     @staticmethod
@@ -766,7 +768,7 @@ class AppLoyers:
                                 on_click=self._ajouter_loc, style=STYLE_BTN),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6,
                 tight=True),
-            alignment=ft.alignment.center, expand=True)
+            alignment=ft.Alignment.CENTER, expand=True)
 
     def _aucun_resultat(self) -> ft.Control:
         return ft.Container(
@@ -777,7 +779,7 @@ class AppLoyers:
                         color=C_MUTED),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6,
                 tight=True),
-            alignment=ft.alignment.center, expand=True)
+            alignment=ft.Alignment.CENTER, expand=True)
 
     # --- charger / enregistrer config -------------------------------------
     async def _charger_config(self, _):
@@ -910,7 +912,7 @@ class AppLoyers:
         return ft.Container(
             ft.Column([titre_section(titre, icone), *contenu], spacing=10,
                       tight=True),
-            padding=ft.padding.only(bottom=6))
+            padding=ft.Padding.only(bottom=6))
 
     def _build_reglages(self):
         """Crée les contrôles déportés (apparence, thème, police) + le dialogue
@@ -943,7 +945,7 @@ class AppLoyers:
         ], spacing=12, tight=True))
         self._dlg_reglages = ft.AlertDialog(
             modal=True, shape=ft.RoundedRectangleBorder(radius=18),
-            bgcolor=ft.Colors.SURFACE, surface_tint_color=ft.Colors.TRANSPARENT,
+            bgcolor=ft.Colors.SURFACE,
             title=ft.Text("Réglages", weight=ft.FontWeight.W_700),
             content=contenu,
             actions=[ft.TextButton(
@@ -963,7 +965,7 @@ class AppLoyers:
             ft.Icon(ft.Icons.RECEIPT_LONG_ROUNDED, color=ft.Colors.ON_PRIMARY,
                     size=22),
             width=44, height=44, border_radius=12, bgcolor=ft.Colors.PRIMARY,
-            alignment=ft.alignment.center)
+            alignment=ft.Alignment.CENTER)
         return ft.Container(
             ft.Row([
                 ft.Row([marque, ft.Column([
@@ -973,7 +975,7 @@ class AppLoyers:
                 ft.IconButton(ft.Icons.SETTINGS_OUTLINED, tooltip="Réglages",
                               on_click=self._ouvrir_reglages),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            padding=ft.padding.symmetric(16, 24))
+            padding=ft.Padding.symmetric(vertical=16, horizontal=24))
 
     def _sidebar(self) -> ft.Control:
         self.b_nom = champ_texte(label="Nom *", expand=True)
@@ -1040,8 +1042,8 @@ class AppLoyers:
 
         return ft.Container(
             contenu, width=400, bgcolor=C_PANEL,
-            padding=ft.padding.symmetric(18, 22),
-            border=ft.border.only(right=ft.BorderSide(1, C_LINE)))
+            padding=ft.Padding.symmetric(vertical=18, horizontal=22),
+            border=ft.Border.only(right=ft.BorderSide(1, C_LINE)))
 
     def _zone_principale(self) -> ft.Control:
         self._compteur = ft.Text("0 locataire", size=TS_LABEL, color=C_MUTED)
@@ -1049,7 +1051,7 @@ class AppLoyers:
 
         cadre = ft.Container(
             self._zone_loc, expand=True, bgcolor=ft.Colors.SURFACE,
-            border=ft.border.all(1, C_LINE), border_radius=RAYON,
+            border=ft.Border.all(1, C_LINE), border_radius=RAYON,
             padding=0, clip_behavior=ft.ClipBehavior.HARD_EDGE)
 
         self._champ_recherche = ft.TextField(
@@ -1058,7 +1060,7 @@ class AppLoyers:
             focused_border_color=ft.Colors.PRIMARY, dense=True,
             prefix_icon=ft.Icons.SEARCH, on_change=self._on_recherche,
             text_style=ft.TextStyle(size=14),
-            content_padding=ft.padding.symmetric(8, 14))
+            content_padding=ft.Padding.symmetric(vertical=8, horizontal=14))
 
         barre = ft.Row([
             ft.Row([ft.Text("Locataires", size=TS_TITRE, weight=ft.FontWeight.W_700),
@@ -1073,7 +1075,7 @@ class AppLoyers:
 
         return ft.Container(
             ft.Column([barre, cadre], spacing=14, expand=True),
-            expand=True, padding=ft.padding.symmetric(18, 24))
+            expand=True, padding=ft.Padding.symmetric(vertical=18, horizontal=24))
 
     def _pied(self) -> ft.Control:
         self._enregistrer_aussi = ft.Switch(label="Enregistrer la config à côté",
@@ -1081,7 +1083,7 @@ class AppLoyers:
         self._btn_generer = ft.FilledButton(
             "Générer le classeur", icon=ft.Icons.TABLE_VIEW_ROUNDED,
             on_click=self._generer,
-            style=ft.ButtonStyle(padding=ft.padding.symmetric(14, 22),
+            style=ft.ButtonStyle(padding=ft.Padding.symmetric(vertical=14, horizontal=22),
                                  shape=ft.RoundedRectangleBorder(radius=RAYON)))
         return ft.Container(
             ft.Row([
@@ -1093,8 +1095,8 @@ class AppLoyers:
                 ft.Container(expand=True),
                 self._btn_generer,
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
-            padding=ft.padding.symmetric(12, 24),
-            border=ft.border.only(top=ft.BorderSide(1, C_LINE)))
+            padding=ft.Padding.symmetric(vertical=12, horizontal=24),
+            border=ft.Border.only(top=ft.BorderSide(1, C_LINE)))
 
     def _construire(self) -> ft.Control:
         # Flet 0.80+ : le FilePicker est un service (page.services), plus un
