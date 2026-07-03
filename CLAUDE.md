@@ -23,6 +23,16 @@ Deux couches, à garder séparées :
 Point d'entrée commun : `valider_config(dict) -> cfg`, utilisé par le YAML (`charger_config`)
 et par l'interface. Garder cette frontière : pas de logique métier dans l'interface.
 
+**Conventions Flet (0.85.3)** : dialogues via `page.show_dialog(dlg)` / `page.pop_dialog()` (les
+anciens `page.open`/`close` n'existent plus) ; `FilePicker` est un **service** (`page.services`),
+et ses `pick_files`/`save_file` sont des **coroutines** — les handlers qui les appellent sont
+`async`. Les helpers de layout minuscules ont disparu : utiliser `ft.Padding/Margin/Border.*` et
+`ft.Alignment.CENTER*` (majuscules), pas `ft.padding.*`. Un `TextStyle` de `text_theme` doit
+porter une couleur explicite (`ft.Colors.ON_SURFACE`) sinon le texte reste blanc en thème clair.
+Réglages persistés par `_charger_reglages`/`_enregistrer_reglages` (→ `%APPDATA%/SuiviLoyers/
+settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
+(thread, API GitHub `releases/latest`, silencieuse hors-ligne, notif SnackBar + lien).
+
 ## Onglets du classeur
 
 `Guide` · `Locataires` (référentiel) · **une feuille par locataire** (saisie, nommée par

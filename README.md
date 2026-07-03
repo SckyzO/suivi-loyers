@@ -36,7 +36,8 @@ Une fois que vous avez le fichier `SuiviLoyers.exe` :
    - Si le locataire est parti, cochez **Le locataire est parti** : cela active la *date de
      sortie*, la case *Caution rendue* et le *motif de départ* (liste : fin de bail, loyer
      impayé, travaux… ou un texte libre).
-5. Cliquez sur **Générer le fichier Excel** et choisissez où l'enregistrer.
+5. Cliquez sur **Générer le fichier Excel** et choisissez où l'enregistrer. Une fois le fichier
+   créé, le logiciel propose d'**ouvrir le dossier** qui le contient.
 
 Le logiciel crée un **dossier dédié** à ce bailleur. Dedans, vous trouvez le classeur Excel
 **et** un fichier de configuration (`.config.json`). Cette configuration sert à retrouver vos
@@ -48,6 +49,10 @@ C'est lui qu'on remplit : chaque mois, saisissez les montants **reçus** dans le
 (CAF reçue, part locataire reçue, dates). Tout le reste (totaux, écarts, statut, bilan) se
 calcule automatiquement. Ne touchez pas aux cases bleutées. Un **total par année** est ajouté
 en bas de chaque année, avec une ligne vide de séparation pour la lisibilité.
+
+Au démarrage, le logiciel vérifie discrètement s'il existe une **nouvelle version** et, le cas
+échéant, propose de la télécharger. Cette vérification est désactivable dans les **Réglages**
+(roue crantée en haut à droite).
 
 ### Les couleurs du suivi
 
