@@ -202,6 +202,22 @@ def main() -> int:
     assert "Loyer (charges comprises)" in eh, list(eh)
     assert str(wc["Régularisation charges"].cell(2, 4).value) == "=C2", \
         wc["Régularisation charges"].cell(2, 4).value
+    # Le pré-remplissage « =C<ligne> » n'est pas une saisie : après l'ajout d'un locataire
+    # en tête (lignes décalées), chaque ligne doit pointer SES provisions, pas l'ancienne
+    # ligne recopiée telle quelle.
+    cfg_c = g.valider_config({
+        "bailleur": {"nom": "C"}, "periode": {"annee_debut": 2025, "annee_fin": 2025},
+        "modules": {"mode_charges": "comprises", "caf": False, "depot_garantie": False,
+                    "documents": False, "regularisation_charges": True},
+        "locataires": [{"nom": "Aa", "identifiant": "Z0", "loyer_nu": 300, "charges": 30,
+                        "date_entree": "2025-01-01"},
+                       {"nom": "Cc", "identifiant": "K1", "loyer_nu": 400, "charges": 50,
+                        "date_entree": "2025-01-01"}]})
+    g.generer_workbook(cfg_c, fc)
+    reg_c = load_workbook(fc)["Régularisation charges"]
+    for r in range(2, reg_c.max_row + 1):
+        v = reg_c.cell(r, 4).value
+        assert v is None or not str(v).startswith("=") or v == f"=C{r}", (r, v)
 
     # Onglet Locataires : Type après Adresse + colonnes Caution / Observation renseignées.
     loc = wb["Locataires"]

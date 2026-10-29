@@ -1986,6 +1986,10 @@ def recolter_regularisation(wb) -> dict:
     res: dict = {}
     for r in range(2, ws.max_row + 1):
         nom, an, v = ws.cell(r, cL).value, ws.cell(r, cA).value, ws.cell(r, cR).value
+        # « =C<ligne> » est le pré-remplissage du mode charges comprises, pas une saisie :
+        # recopié tel quel, il pointerait la ligne d'un autre locataire après un décalage.
+        if v == f"=C{r}":
+            continue
         if nom and an not in (None, "") and v not in (None, ""):
             res[(str(nom), int(an))] = v
     return res
