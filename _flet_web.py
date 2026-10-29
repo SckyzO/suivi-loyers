@@ -1,5 +1,6 @@
 """UI Flet en mode web headless pour test visuel + screenshots. Jetable.
-État piloté par la variable d'env UISTATE : empty | table | dark | dialog."""
+État piloté par la variable d'env UISTATE : empty | table | dark | dialog |
+partis (partis masqués) | partis_tous (recherche ne trouvant que des partis masqués)."""
 import os
 import flet as ft
 import interface_flet as gui
@@ -24,7 +25,7 @@ SEED = [
 
 def main(page):
     app = gui.AppLoyers(page)
-    if STATE in ("table", "dark", "dialog", "tri", "search"):
+    if STATE in ("table", "dark", "dialog", "tri", "search", "partis", "partis_tous"):
         app.locataires = list(SEED)
         app._rafraichir_table()
     if STATE == "tri":
@@ -32,6 +33,10 @@ def main(page):
         app._rafraichir_table()
     if STATE == "search":
         app._recherche = "paris"
+        app._rafraichir_table()
+    if STATE in ("partis", "partis_tous"):
+        app._afficher_partis = app._switch_partis.value = False
+        app._recherche = "sophie" if STATE == "partis_tous" else ""
         app._rafraichir_table()
     if STATE == "dark":
         app.apparence = "sombre"

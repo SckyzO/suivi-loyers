@@ -36,7 +36,11 @@ et ses `pick_files`/`save_file` sont des **coroutines** — les handlers qui les
 porter une couleur explicite (`ft.Colors.ON_SURFACE`) sinon le texte reste blanc en thème clair.
 Réglages persistés par `_charger_reglages`/`_enregistrer_reglages` (→ `%APPDATA%/SuiviLoyers/
 settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
-(thread, API GitHub `releases/latest`, silencieuse hors-ligne, notif SnackBar + lien).
+(thread, API GitHub `releases/latest`, silencieuse hors-ligne, notif SnackBar + lien). La clé
+`afficher_partis` (défaut `true`) mémorise le toggle « Afficher les locataires partis » de la
+table : **filtre d'affichage seulement**, le classeur garde tous les locataires. Le filtrage
+vit dans des fonctions pures de module (`_filtrer_locataires`, `_partis_masques`,
+`_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`.
 
 ## Onglets du classeur
 
@@ -108,6 +112,7 @@ génération des classeurs d'exemple, `tests/smoke.py`, puis sync (code vers le 
 make            # build + lint + gen + test + sync (workflow complet)
 make lint       # lint ruff seul (bugs/style ; config dans ruff.toml)
 make test       # smoke test seul (structure, modularité, préservation)
+make test-ui    # fonctions pures de l'interface (filtrage table) — image Dockerfile.linux
 make sync       # code -> dossier Windows, xlsx -> ~/Downloads
 ```
 

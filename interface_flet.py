@@ -147,6 +147,47 @@ def _seed_theme_classeur(theme_id: str) -> str:
     return "#" + spec["primaire"]
 
 
+def _est_parti(loc: dict) -> bool:
+    """Locataire parti = date de sortie renseignée (même règle que le badge État)."""
+    return bool(loc.get("date_sortie"))
+
+
+def _texte_recherche(loc: dict) -> str:
+    return " ".join(
+        str(loc.get(k, "") or "")
+        for k in ("nom", "prenom", "identifiant", "type_bien", "adresse")).lower()
+
+
+def _resultats_recherche(locataires: list[dict], recherche: str) -> list[tuple[int, dict]]:
+    q = recherche.strip().lower()
+    return [(i, loc) for i, loc in enumerate(locataires)
+            if not q or q in _texte_recherche(loc)]
+
+
+def _filtrer_locataires(locataires: list[dict], recherche: str,
+                        afficher_partis: bool) -> list[tuple[int, dict]]:
+    """(index d'origine, locataire) retenus par la recherche et le toggle des
+    partis. Filtre d'affichage seulement : le classeur garde tous les locataires."""
+    return [(i, loc) for i, loc in _resultats_recherche(locataires, recherche)
+            if afficher_partis or not _est_parti(loc)]
+
+
+def _partis_masques(locataires: list[dict], recherche: str, afficher_partis: bool) -> int:
+    """Nombre de locataires partis, correspondant à la recherche, cachés par le toggle."""
+    if afficher_partis:
+        return 0
+    return sum(_est_parti(loc) for _, loc in _resultats_recherche(locataires, recherche))
+
+
+def _libelle_compteur(n_total: int, n_affiches: int, n_partis_masques: int) -> str:
+    base = (f"{n_affiches} / {n_total}" if n_affiches != n_total
+            else f"{n_total} locataire{'s' if n_total > 1 else ''}")
+    if n_partis_masques:
+        s = "s" if n_partis_masques > 1 else ""
+        base += f" · {n_partis_masques} parti{s} masqué{s}"
+    return base
+
+
 def _initiales(nom: str, prenom: str) -> str:
     a = (prenom or nom or "?").strip()[:1]
     b = (nom if prenom else (prenom or "")).strip()[:1]
@@ -453,6 +494,8 @@ class AppLoyers:
         self._tri_asc = True          # sens du tri
         self._reglages = _charger_reglages()
         self._maj_active = bool(self._reglages.get("verifier_maj", True))
+        # Toggle « Afficher les locataires partis » : affichés par défaut (non-régression).
+        self._afficher_partis = bool(self._reglages.get("afficher_partis", True))
         page.title = APP_TITRE
         page.window.width = 1180
         page.window.height = 800
@@ -643,11 +686,6 @@ class AppLoyers:
             return f"→ {s}"
         return "—"
 
-    def _texte_recherche(self, loc: dict) -> str:
-        return " ".join(
-            str(loc.get(k, "") or "")
-            for k in ("nom", "prenom", "identifiant", "type_bien", "adresse")).lower()
-
     def _colonnes(self) -> list[dict]:
         """Colonnes actives selon les modules. `flex` = poids `expand` ; `tri` =
         clé de tri (None => colonne non triable, ex. Actions)."""
@@ -668,18 +706,17 @@ class AppLoyers:
             {"cle": "periode", "label": "Période", "flex": 20,
              "tri": lambda loc: loc.get("date_entree") or ""},
             {"cle": "etat", "label": "État", "flex": 14,
-             "tri": lambda loc: 1 if loc.get("date_sortie") else 0},
+             "tri": lambda loc: 1 if _est_parti(loc) else 0},
             {"cle": "actions", "label": "", "flex": 12, "droite": True, "tri": None},
         ]
         return cols
 
     def _locataires_affiches(self) -> list[tuple[int, dict]]:
-        """(index d'origine, locataire) filtrés par recherche et triés. L'index
-        d'origine reste celui de self.locataires (modifier/supprimer corrects)."""
-        items = list(enumerate(self.locataires))
-        q = self._recherche.strip().lower()
-        if q:
-            items = [(i, loc) for i, loc in items if q in self._texte_recherche(loc)]
+        """(index d'origine, locataire) filtrés par recherche et toggle des partis,
+        puis triés. L'index d'origine reste celui de self.locataires (modifier/
+        supprimer corrects)."""
+        items = _filtrer_locataires(self.locataires, self._recherche,
+                                    self._afficher_partis)
         col = next((c for c in self._cols_courantes if c["cle"] == self._tri_cle), None)
         if col and col.get("tri"):
             items.sort(key=lambda it: col["tri"](it[1]), reverse=not self._tri_asc)
@@ -731,7 +768,7 @@ class AppLoyers:
                         no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, expand=True),
             ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         elif cle == "etat":
-            contenu = (self._badge("Parti", C_PARTI) if loc.get("date_sortie")
+            contenu = (self._badge("Parti", C_PARTI) if _est_parti(loc)
                        else self._badge("Présent", C_OK))
         elif cle == "actions":
             contenu = ft.Row([
@@ -782,6 +819,12 @@ class AppLoyers:
         self._recherche = e.control.value or ""
         self._rafraichir_table()
 
+    def _on_toggle_partis(self, e):
+        self._afficher_partis = bool(self._switch_partis.value)
+        self._reglages["afficher_partis"] = self._afficher_partis
+        _enregistrer_reglages(self._reglages)
+        self._rafraichir_table()
+
     def _rafraichir_table(self):
         self._cols_courantes = self._colonnes()
         n = len(self.locataires)
@@ -793,14 +836,18 @@ class AppLoyers:
                 self._zone_loc.content = ft.Column(
                     [self._entete_table(), corps], spacing=0, expand=True)
             else:
-                self._zone_loc.content = self._aucun_resultat()
-            n_aff = len(affiches)
-            self._compteur.value = (f"{n_aff} / {n}" if self._recherche.strip()
-                                    and n_aff != n
-                                    else f"{n} locataire{'s' if n > 1 else ''}")
+                n_masques = _partis_masques(self.locataires, self._recherche,
+                                            self._afficher_partis)
+                self._zone_loc.content = (self._partis_tous_masques() if n_masques
+                                          else self._aucun_resultat())
+            self._compteur.value = _libelle_compteur(
+                n, len(affiches), _partis_masques(self.locataires, self._recherche,
+                                                  self._afficher_partis))
         else:
             self._zone_loc.content = self._etat_vide()
             self._compteur.value = "0 locataire"
+        # Sans aucun parti, le toggle n'aurait pas d'effet : grisé.
+        self._switch_partis.disabled = not any(_est_parti(loc) for loc in self.locataires)
         self.page.update()
 
     def _etat_vide(self) -> ft.Control:
@@ -1171,6 +1218,19 @@ class AppLoyers:
             padding=ft.Padding.symmetric(vertical=18, horizontal=22),
             border=ft.Border.only(right=ft.BorderSide(1, C_LINE)))
 
+    def _partis_tous_masques(self) -> ft.Control:
+        return ft.Container(
+            ft.Column([
+                ft.Icon(ft.Icons.VISIBILITY_OFF_OUTLINED, size=48, color=C_MUTED),
+                ft.Text("Locataires partis masqués", size=16,
+                        weight=ft.FontWeight.W_600),
+                ft.Text("Les locataires correspondants sont tous partis. Activez "
+                        "« Afficher les locataires partis » pour les voir.",
+                        color=C_MUTED, text_align=ft.TextAlign.CENTER),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6,
+                tight=True),
+            alignment=ft.Alignment.CENTER, expand=True)
+
     def _zone_principale(self) -> ft.Control:
         self._compteur = ft.Text("0 locataire", size=TS_LABEL, color=C_MUTED)
         self._zone_loc = ft.Container(expand=True)
@@ -1188,19 +1248,27 @@ class AppLoyers:
             text_style=ft.TextStyle(size=14),
             content_padding=ft.Padding.symmetric(vertical=8, horizontal=14))
 
+        self._switch_partis = ft.Switch(
+            label="Afficher les locataires partis", value=self._afficher_partis,
+            on_change=self._on_toggle_partis,
+            tooltip="Affichage seulement : le classeur garde tous les locataires.")
+
         barre = ft.Row([
             ft.Row([ft.Text("Locataires", size=TS_TITRE, weight=ft.FontWeight.W_700),
                     self._compteur], spacing=12,
                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Row([self._champ_recherche,
-                    ft.FilledButton("Ajouter", icon=ft.Icons.ADD,
-                                    on_click=self._ajouter_loc, style=STYLE_BTN)],
-                   spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.FilledButton("Ajouter", icon=ft.Icons.ADD,
+                            on_click=self._ajouter_loc, style=STYLE_BTN),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
+        # Ligne de filtres (affichage seulement) séparée des actions : tient dans la
+        # largeur minimale de la fenêtre.
+        filtres = ft.Row([self._champ_recherche, self._switch_partis], spacing=16,
+                         vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
         return ft.Container(
-            ft.Column([barre, cadre], spacing=14, expand=True),
+            ft.Column([barre, filtres, cadre], spacing=14, expand=True),
             expand=True, padding=ft.Padding.symmetric(vertical=18, horizontal=24))
 
     def _pied(self) -> ft.Control:

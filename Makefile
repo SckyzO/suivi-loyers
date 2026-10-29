@@ -7,6 +7,7 @@
 #     make build      # construit l'image Docker
 #     make lint       # lint ruff (bugs/style)
 #     make test       # smoke test du moteur
+#     make test-ui    # test du filtrage de la table (fonctions pures de l'interface)
 #     make gen        # génère les classeurs d'exemple dans exemples/
 #     make sync       # source + exemples -> dossier Windows
 #     make clean      # supprime les exemples générés
@@ -30,9 +31,9 @@ SRC := generer_suivi_loyers.py requirements.txt \
        Dockerfile docker-compose.yml Makefile README.md CLAUDE.md .gitignore
 
 .DEFAULT_GOAL := all
-.PHONY: all build lint gen test sync sync-win sync-exemples clean linux linux-image
+.PHONY: all build lint gen test test-ui sync sync-win sync-exemples clean linux linux-image
 
-all: build lint gen test sync ## Workflow complet de fin de modification
+all: build lint gen test test-ui sync ## Workflow complet de fin de modification
 
 lint: ## Lint ruff (bugs/style) via l'image officielle — config dans ruff.toml
 	docker run --rm -v "$(CURDIR):/app" -w /app $(RUFF) check generer_suivi_loyers.py interface_flet.py tests
@@ -48,6 +49,10 @@ gen: build ## Génère les classeurs d'exemple dans exemples/
 
 test: build ## Smoke test du moteur (structure, modularité, préservation)
 	docker run --rm $(USERFLAG) --entrypoint python -e PYTHONPATH=/app -v "$(CURDIR):/app" $(IMAGE) tests/smoke.py
+
+test-ui: linux-image ## Test des fonctions pures de l'interface (image de build Linux, qui a Flet)
+	docker run --rm $(USERFLAG) -e HOME=/tmp -e PYTHONPATH=/src -v "$(CURDIR):/src" -w /src \
+	  --entrypoint python $(LINUX_BUILD_IMAGE) tests/ui_filtres.py
 
 sync: sync-win sync-exemples ## Synchronise source + exemples vers Windows
 
