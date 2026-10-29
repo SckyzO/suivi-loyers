@@ -28,7 +28,7 @@ Deux couches, à garder séparées :
 Point d'entrée commun : `valider_config(dict) -> cfg`, utilisé par le YAML (`charger_config`)
 et par l'interface. Garder cette frontière : pas de logique métier dans l'interface.
 
-**Conventions Flet (0.85.3)** : dialogues via `page.show_dialog(dlg)` / `page.pop_dialog()` (les
+**Conventions Flet (1.0.5)** : dialogues via `page.show_dialog(dlg)` / `page.pop_dialog()` (les
 anciens `page.open`/`close` n'existent plus) ; `FilePicker` est un **service** (`page.services`),
 et ses `pick_files`/`save_file` sont des **coroutines** — les handlers qui les appellent sont
 `async`. Les helpers de layout minuscules ont disparu : utiliser `ft.Padding/Margin/Border.*` et

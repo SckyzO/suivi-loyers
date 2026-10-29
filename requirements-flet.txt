@@ -1,8 +1,8 @@
 # Dépendances de l'interface Flet (interface_flet.py).
 # Séparé de requirements.txt (deps du moteur openpyxl/PyYAML, hors UI).
-# Flet 0.85.x = lignée d'API « rewrite » (1.0-alpha) : FilePicker devenu service
-# + coroutines, dialogues via page.show_dialog/pop_dialog. `flet pack` (PyInstaller)
-# reste disponible, la chaîne de build est inchangée.
-flet==0.85.3
+# Flet 1.0 (API « rewrite » stabilisée) : services (FilePicker, UrlLauncher) aux
+# méthodes coroutines, dialogues via page.show_dialog/pop_dialog. `flet pack`
+# (PyInstaller) reste disponible, la chaîne de build est inchangée.
+flet==1.0.5
 openpyxl==3.1.5
 PyYAML==6.0.3

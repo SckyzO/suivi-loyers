@@ -1091,9 +1091,9 @@ class AppLoyers:
     def _ouvrir_reglages(self, _):
         self.page.show_dialog(self._dlg_reglages)
 
-    def _ouvrir_github(self, _):
+    async def _ouvrir_github(self, _):
         if GITHUB_URL:
-            self.page.launch_url(GITHUB_URL)
+            await self._url.launch_url(GITHUB_URL)
 
     # --- vérification de mise à jour --------------------------------------
     def _verifier_maj(self):
@@ -1117,9 +1117,12 @@ class AppLoyers:
         threading.Thread(target=worker, daemon=True).start()
 
     def _notifier_maj(self, version: str, url: str):
+        async def telecharger(_):
+            await self._url.launch_url(url)
+
         self.page.show_dialog(ft.SnackBar(
             ft.Text(f"Une nouvelle version ({version}) est disponible."),
-            action="Télécharger", on_action=lambda e: self.page.launch_url(url),
+            action="Télécharger", on_action=telecharger,
             show_close_icon=True, duration=12000))
         self.page.update()
 
@@ -1300,6 +1303,9 @@ class AppLoyers:
         # overlay ; un seul suffit car pick_files/save_file renvoient le résultat.
         self._fp = ft.FilePicker()
         self.page.services.append(self._fp)
+        # Flet 1.0 : page.launch_url() supprimé -> service UrlLauncher (coroutine).
+        # Référence gardée : le registre purge les services non référencés.
+        self._url = ft.UrlLauncher()
         self._build_reglages()
 
         corps = ft.Row([self._sidebar(), self._zone_principale()],

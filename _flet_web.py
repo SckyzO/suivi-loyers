@@ -48,7 +48,7 @@ def main(page):
             app._on_loc_valide(None)).ouvrir()).start()
     if STATE == "reglages":
         import threading
-        threading.Timer(3.5, lambda: app.page.open(app._dlg_reglages)).start()
+        threading.Timer(3.5, lambda: app.page.show_dialog(app._dlg_reglages)).start()
 
 
-ft.app(main, view=None, host="0.0.0.0", port=8550)
+ft.run(main, view=None, host="0.0.0.0", port=8550)

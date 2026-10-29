@@ -11,9 +11,9 @@ updates:
     commit-message:
       prefix: deps
     ignore:
-      # Flet 0.80+ est une réécriture majeure de l'API ; interface_flet.py cible
-      # la lignée 0.28.x « classique » (cf. requirements-flet.txt). On autorise
-      # seulement les patchs (0.28.x), pas les bumps minor/major automatiques.
+      # Les versions mineures de Flet cassent régulièrement l'API (0.80, 0.85,
+      # 1.0…) : on n'accepte que les patchs automatiques (1.0.x), une montée
+      # mineure/majeure se fait à la main avec rendu visuel (cf. CLAUDE.md).
       - dependency-name: flet
         update-types:
           - version-update:semver-minor
