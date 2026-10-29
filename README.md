@@ -25,18 +25,30 @@ droite).
 
 ## Régénérer sans perdre ses saisies
 
-Quand vous régénérez un classeur **par-dessus un fichier existant** (après avoir ajouté un
-locataire, changé une option, etc.), le logiciel :
+Pour mettre à jour un classeur (ajouter un locataire, changer une option…), régénérez-le
+**sur le même fichier**. Le logiciel retient le dernier classeur généré pour chaque
+bailleur et le propose d'office. En le remplaçant, il :
 
 1. reprend automatiquement tout ce que vous aviez saisi : les montants reçus et les dates
    de chaque mois, les charges réelles de la régularisation et les indices IRL ;
 2. garde une copie de l'ancien fichier à côté du nouveau, nommée
    `<nom du classeur>.bak-<date et heure>.xlsx`. En cas de doute, cette copie contient
-   exactement ce que vous aviez avant.
+   exactement ce que vous aviez avant. Si elle ne peut pas être créée, rien n'est remplacé.
 
-Les saisies sont rattachées au nom et prénom du locataire, à l'année et au mois. Si vous
-renommez un locataire, ses anciennes saisies ne sont pas reportées dans le nouveau classeur :
-elles restent dans la copie `.bak`.
+Si vous choisissez un autre fichier (un nouveau nom, ou un fichier sans saisies), le
+logiciel demande d'abord d'où reprendre les saisies. Le classeur d'origine n'est jamais
+modifié. Pour garder une version datée, copiez simplement le fichier.
+
+![Question posée avant de générer sous un nouveau nom](docs/screenshots/reprise.png)
+
+Après chaque génération, un compte rendu indique ce qui a été repris et le nom de la copie
+de sécurité. Les saisies sont rattachées au nom et prénom du locataire, à l'année et au
+mois : celles qui n'ont plus de place dans le nouveau classeur (locataire renommé ou
+supprimé, mois sorti de la période, option CAF désactivée…) sont signalées, avec le fichier
+où elles restent.
+
+Le bouton **Aide**, en haut à droite, ouvre un mode d'emploi. Il s'affiche tout seul au
+premier lancement.
 
 ## Utiliser le logiciel
 
@@ -51,8 +63,8 @@ elles restent dans la copie `.bak`.
    - *Tableau de bord* : un onglet de synthèse avec graphiques.
    - *Régularisation des charges* et *Révision IRL* : voir plus bas.
 3. Ajoutez les locataires avec le bouton **Ajouter**.
-4. Cliquez sur **Générer le classeur** et choisissez où l'enregistrer. Le logiciel propose
-   ensuite d'ouvrir le dossier qui le contient.
+4. Cliquez sur **Générer le classeur** et choisissez où l'enregistrer. Le logiciel affiche
+   ensuite un compte rendu et propose d'ouvrir le dossier qui contient le classeur.
 
 Si l'interrupteur **Enregistrer la config à côté** est activé (c'est le cas par défaut), le
 logiciel écrit aussi un fichier `.json` du même nom que le classeur. C'est votre
@@ -160,7 +172,7 @@ synchronisation vers le dossier Windows.
 ```bash
 make            # build + lint + exemples + tests + sync
 make test       # smoke test du moteur
-make test-ui    # filtrage de la liste (fonctions pures de l'interface)
+make test-ui    # fonctions pures de l'interface (filtrage de la liste, reprise)
 make linux      # binaire Linux -> dist/linux/SuiviLoyers
 ```
 
@@ -193,7 +205,7 @@ Excel les affiche en français et LibreOffice les lit sans souci.
 | `generer_suivi_loyers.py` | Moteur : construit le classeur à partir d'une configuration. |
 | `interface_flet.py` | Interface graphique (Flet). |
 | `configs/` | Configurations d'exemple (`exemple.yaml`, `minimal.yaml`). |
-| `tests/` | `smoke.py` (moteur) et `ui_filtres.py` (filtrage de la liste). |
+| `tests/` | `smoke.py` (moteur), `ui_filtres.py` et `ui_reprise.py` (fonctions de l'interface : filtrage de la liste, reprise des saisies). |
 | `build-flet.bat` | Construit `SuiviLoyers.exe` sous Windows. |
 | `Dockerfile.linux`, `packaging/` | Build du binaire Linux et son runtime hook PyInstaller. |
 | `Dockerfile`, `docker-compose.yml` | Environnement du moteur (génération, tests). |

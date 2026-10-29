@@ -6,6 +6,36 @@ Les changements notables de chaque version. Le format suit
 
 ## [Non publié]
 
+### Ajouté
+
+- Le logiciel retient le dernier classeur généré pour chaque bailleur et le propose d'office
+  au moment de générer : le remplacer reprend les saisies sans aucune question.
+- Avant de générer dans un fichier qui ne contient pas les saisies attendues (nouveau nom,
+  fichier vide, autre classeur), le logiciel demande d'où les reprendre, en indiquant combien
+  de mois chaque fichier contient. Le classeur d'origine n'est jamais modifié.
+- Compte rendu après chaque génération : saisies reprises, nom de la copie de sécurité, et
+  toute saisie non reprise (locataire renommé ou supprimé, mois hors de la période, option
+  désactivée) avec le fichier où elle reste.
+- Mode d'emploi intégré (bouton « Aide »), ouvert tout seul au premier lancement.
+- Onglet Guide du classeur : section « Mettre à jour le classeur ».
+
+### Modifié
+
+- Les erreurs de génération s'affichent dans une fenêtre au lieu d'un bandeau éphémère.
+
+### Corrigé
+
+- Générer sous un nouveau nom partait d'un classeur vide sans prévenir : les saisies
+  restaient dans l'ancien fichier et semblaient perdues.
+- Si la copie de sécurité ne peut pas être créée, la génération s'arrête au lieu de remplacer
+  le classeur.
+- Un classeur qui ne peut pas être remplacé (ouvert dans Excel, en lecture seule) donne un
+  message clair avant tout travail, au lieu d'une erreur « Errno 13 ».
+- Régularisation des charges en mode charges comprises : après l'ajout d'un locataire, les
+  charges réelles pré-remplies d'un locataire pouvaient pointer les provisions d'un autre.
+- Le bouton « Générer le classeur » affiche de nouveau « Génération… » pendant la génération.
+- L'onglet Guide cite la mise en demeure parmi les documents à imprimer.
+
 ## [1.2.0] - 2026-10-29
 
 ### Ajouté

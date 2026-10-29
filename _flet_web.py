@@ -1,7 +1,8 @@
 """UI Flet en mode web headless pour test visuel + screenshots. Jetable.
 État piloté par la variable d'env UISTATE : empty | table | dark | dialog |
 partis (partis masqués) | partis_tous (recherche ne trouvant que des partis masqués) |
-readme | readme_dialog | readme_dark (captures du README : bailleur + locataires remplis) |
+readme | readme_dialog | readme_dark | readme_reprise (captures du README : bailleur +
+locataires remplis) |
 reprise_proposer | reprise_choisir | reprise_premier (question avant de générer) |
 rapport | rapport_ecarts (compte rendu après génération) | generation (parcours réel de
 génération sous un nouveau nom) | aide (1er lancement : mode d'emploi ouvert d'office)."""
@@ -35,7 +36,7 @@ def main(page):
         gui._enregistrer_reglages({**gui._charger_reglages(), "aide_vue": True})
     app = gui.AppLoyers(page)
     if STATE in ("table", "dark", "dialog", "tri", "search", "partis", "partis_tous",
-                 "readme", "readme_dialog", "readme_dark"):
+                 "readme", "readme_dialog", "readme_dark", "readme_reprise"):
         app.locataires = list(SEED)
         app._rafraichir_table()
     if STATE == "tri":
@@ -76,9 +77,9 @@ def main(page):
     # Reprise des saisies : questions posées avant de générer, puis compte rendu.
     ancien = Path("/data/Suivi_Les_Tilleuls AU 28-09-2026.xlsx")
     nouveau = Path("/data/Suivi_Les_Tilleuls MISE A JOUR 29-10-26.xlsx")
-    if STATE.startswith("reprise_"):
+    if STATE.startswith("reprise_") or STATE == "readme_reprise":
         import threading
-        cas = STATE.removeprefix("reprise_")
+        cas = "proposer" if STATE == "readme_reprise" else STATE.removeprefix("reprise_")
         n_sortie = {"proposer": None, "choisir": 12, "premier": None}[cas]
         n_prec = 0 if cas == "premier" else 48
         threading.Timer(3.5, lambda: app._demander_reprise(

@@ -39,7 +39,8 @@ et ses `pick_files`/`save_file` sont des **coroutines** — les handlers qui les
 `async`. Les helpers de layout minuscules ont disparu : utiliser `ft.Padding/Margin/Border.*` et
 `ft.Alignment.CENTER*` (majuscules), pas `ft.padding.*`. `page.launch_url()` n'existe plus
 (1.0) : ouvrir une URL via le service `ft.UrlLauncher()` (coroutine, garder une référence sinon
-le registre le purge). Dépréciés en 1.0, retirés en 1.3 : `border_radius`/`border_color`/
+le registre le purge). Libellé d'un bouton = `content` : l'ancien attribut `text` est ignoré
+sans erreur. Dépréciés en 1.0, retirés en 1.3 : `border_radius`/`border_color`/
 `focused_border_color` des `TextField`/`Dropdown` (à migrer vers `border=OutlineInputBorder(...)`
 avec contrôle visuel). Toute montée mineure de Flet casse l'API : la faire à la main avec rendu
 (Dependabot n'accepte que les patchs). Un `TextStyle` de `text_theme` doit
@@ -50,7 +51,13 @@ settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jo
 `afficher_partis` (défaut `true`) mémorise le toggle « Afficher les locataires partis » de la
 table : **filtre d'affichage seulement**, le classeur garde tous les locataires. Le filtrage
 vit dans des fonctions pures de module (`_filtrer_locataires`, `_partis_masques`,
-`_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`.
+`_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`. La clé `classeurs`
+(slug du bailleur → chemin) mémorise le **dernier classeur généré**, proposé d'office à la
+génération ; si le fichier choisi ne porte pas les saisies attendues (neuf, vide, autre
+classeur), l'interface demande d'où les reprendre (`_cas_reprise`) puis affiche un compte
+rendu (`_lignes_rapport`) : fonctions pures testées par `tests/ui_reprise.py`. La clé
+`aide_vue` dit si le mode d'emploi intégré (liste `AIDE`, dont les libellés cités doivent
+rester ceux de l'interface) a été lu ; sinon il s'ouvre au démarrage.
 
 ## Onglets du classeur
 
@@ -86,6 +93,15 @@ Flux de données clé :
   retirer cette copie. **Exigence produit : aucune perte de saisie, même « au cas où »** ;
   toute fonction qui supprime ou écarte des données (locataire supprimé ou renommé, période
   réduite) doit soit les reprendre, soit prévenir l'utilisateur et lui laisser une copie.
+  `generer_workbook(..., source=, rapport=)` : `source` = classeur dont lire les saisies
+  (générer sous un nouveau nom sans repartir de zéro ; jamais modifié ; absent → erreur,
+  jamais un classeur vide). `rapport` (`RapportGeneration`) reçoit ce qui est repris, écarté
+  (`Ecartee` avec motif et unité) et la copie `.bak`, calculés par **relecture** du nouveau
+  classeur (`_bilan_reprise`) : toute nouvelle saisie préservée doit avoir son `recolter_*`
+  pour être vérifiée. Copie `.bak` impossible → la génération s'arrête (ne jamais avaler cette
+  erreur) ; classeur non remplaçable (ouvert dans Excel, lecture seule) → `_verifier_remplacable`
+  échoue avant tout travail. Le pré-remplissage `=C<ligne>` de la régularisation n'est pas une
+  saisie (`recolter_regularisation` l'ignore, sinon il pointerait une autre ligne).
 - **Nom de feuille locataire** : passe par `_nom_feuille` (≤ 31 car., caractères interdits,
   unicité), au format « identifiant - Nom ». Toute référence inter-feuilles passe par `_ref`
   (gère espaces et apostrophes).
@@ -126,7 +142,7 @@ génération des classeurs d'exemple, `tests/smoke.py`, puis sync (code vers le 
 make            # build + lint + gen + test + sync (workflow complet)
 make lint       # lint ruff seul (bugs/style ; config dans ruff.toml)
 make test       # smoke test seul (structure, modularité, préservation)
-make test-ui    # fonctions pures de l'interface (filtrage table) — image Dockerfile.linux
+make test-ui    # fonctions pures de l'interface (filtrage, reprise) — image Dockerfile.linux
 make sync       # code -> dossier Windows, xlsx -> ~/Downloads
 make linux      # binaire Linux -> dist/linux/SuiviLoyers
 ```
@@ -134,8 +150,9 @@ make linux      # binaire Linux -> dist/linux/SuiviLoyers
 Chaque changement visible par l'utilisateur ajoute une ligne sous `[Non publié]` dans
 `CHANGELOG.md` (Keep a Changelog, en français) ; à la release, cette section prend le numéro
 du tag. Les captures du README (`docs/screenshots/`) se refont avec le harnais `_flet_web.py`
-(états `readme`, `readme_dialog`, `readme_dark`, `reglages`) + Playwright, et le classeur via
-LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
+(états `readme`, `readme_dialog`, `readme_dark`, `readme_reprise`, `reglages`) + Playwright ;
+l'état `generation` rejoue une vraie génération sous un nouveau nom (sans dialogue natif). Le
+classeur se rend via LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
 
 Le lint (`ruff.toml`) volontairement n'impose ni la longueur de ligne (E501) ni le tri d'imports
 (isort) : wrapping et regroupement sont manuels.
