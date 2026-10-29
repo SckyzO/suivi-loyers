@@ -8,7 +8,12 @@ interface graphique pour un usage non technique sous Windows.
 - **Utilisatrice finale** : non technicienne, sous Windows. Elle ne lance que l'`.exe`, jamais
   Python. Toute l'ergonomie passe par `interface_flet.py`.
 - **Mainteneur** : sous WSL, **tout en Docker** (pas de venv local). Le `.exe` se construit
-  côté Windows avec `build-flet.bat` (PyInstaller n'est pas multi-plateforme).
+  côté Windows avec `build-flet.bat` (PyInstaller n'est pas multi-plateforme). Le binaire
+  **Linux** se construit dans Docker : `make linux` (`Dockerfile.linux`, base bookworm = glibc
+  2.36 minimale). Un runtime hook fige `FLET_LINUX_DISTRO` à la distro du build : sans lui,
+  flet-desktop 0.85 cherche l'archive client embarquée sous le nom de la distro de l'**hôte**
+  et tente un téléchargement GitHub. CI : `build.yml` (jobs `windows` + `linux`, puis
+  `release` unique sur tag `v*`).
 - **Langue** : interface, classeur généré et documentation en **français** (audience française).
 
 ## Architecture

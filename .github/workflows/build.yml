@@ -1,0 +1,127 @@
+name: Build executables
+
+# Construit l'interface Flet pour Windows (dist/SuiviLoyers.exe, sur runner
+# Windows) et Linux (dist/linux/SuiviLoyers, via Dockerfile.linux comme `make linux`)
+# — PyInstaller n'est pas multi-plateforme — puis publie les deux archives en
+# Release GitHub. Déclenché par un tag `v*` (ex. `git tag v1.0.0 && git push --tags`).
+# `workflow_dispatch` permet aussi un build manuel (artifacts seuls, sans release).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-flet.txt pyinstaller
+
+      # Sur un tag, fige la version affichée dans « À propos » (ex. v1.0.0 -> 1.0.0).
+      # TAG vient de l'environnement (pas d'interpolation ${{ }} dans le run).
+      - name: Injecter la version du tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $v = $env:TAG -replace '^v', ''
+          (Get-Content interface_flet.py) `
+            -replace '_BAKED_VERSION = "[^"]*"', "_BAKED_VERSION = ""$v""" `
+            | Set-Content interface_flet.py
+
+      # Réplique de la commande `pack` de build-flet.bat (via `flet pack`,
+      # qui embarque PyInstaller + le client Flet). Sortie : dist/SuiviLoyers.exe.
+      - name: Construire l'exécutable (Flet)
+        run: >
+          flet pack interface_flet.py
+          --name SuiviLoyers
+          --product-name "Suivi des loyers"
+          --hidden-import yaml
+          --hidden-import openpyxl
+          --pyinstaller-build-args="--log-level=WARN"
+
+      # L'exe + une notice sont zippés : le .zip se télécharge sans blocage et
+      # embarque le mode d'emploi (dont le contournement SmartScreen).
+      - name: Empaqueter l'archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path SuiviLoyers | Out-Null
+          Copy-Item dist/SuiviLoyers.exe SuiviLoyers/
+          Copy-Item .github/LISEZ-MOI.txt SuiviLoyers/
+          Compress-Archive -Path SuiviLoyers/* -DestinationPath SuiviLoyers-windows.zip -Force
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SuiviLoyers-windows
+          path: SuiviLoyers-windows.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Même injection de version que le job Windows (cf. ci-dessus).
+      - name: Injecter la version du tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: sed -i "s/^_BAKED_VERSION = \"[^\"]*\"/_BAKED_VERSION = \"${TAG#v}\"/" interface_flet.py
+
+      # Même recette que `make linux` : l'image Debian bookworm fixe la glibc
+      # minimale (2.36) et embarque le runtime hook FLET_LINUX_DISTRO.
+      - name: Construire l'exécutable (Flet)
+        run: |
+          docker build -f Dockerfile.linux -t suivi-loyers-linux-build .
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/src" suivi-loyers-linux-build
+
+      # tar.gz plutôt que zip : conserve le bit exécutable du binaire.
+      - name: Empaqueter l'archive
+        run: |
+          mkdir SuiviLoyers
+          cp dist/linux/SuiviLoyers SuiviLoyers/
+          cp .github/LISEZ-MOI-linux.txt SuiviLoyers/LISEZ-MOI.txt
+          tar -czf SuiviLoyers-linux-x86_64.tar.gz SuiviLoyers
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SuiviLoyers-linux
+          path: SuiviLoyers-linux-x86_64.tar.gz
+
+  # Publication unique une fois les deux builds réussis (évite que deux jobs se
+  # disputent la création de la même Release).
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # requis pour créer la Release et y attacher les archives
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+
+      # `--generate-notes` bâtit le changelog depuis les commits ; GITHUB_REF_NAME
+      # est passé par l'environnement (pas d'interpolation ${{ }} dans la
+      # commande) pour éviter toute injection. --repo : pas de checkout ici.
+      - name: Publier la Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          SuiviLoyers-windows.zip SuiviLoyers-linux-x86_64.tar.gz
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME" --generate-notes

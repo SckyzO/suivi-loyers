@@ -111,6 +111,20 @@ L'`.exe` se construit sous Windows.
 3. À la fin, l'exécutable se trouve dans `dist\SuiviLoyers.exe`. Copiez-le où vous voulez ;
    il fonctionne seul, sans Python.
 
+### Linux
+
+Chaque release GitHub contient aussi `SuiviLoyers-linux-x86_64.tar.gz` (binaire + notice). Pour
+le construire soi-même, tout passe par Docker (rien à installer d'autre) :
+
+```bash
+make linux            # -> dist/linux/SuiviLoyers
+./dist/linux/SuiviLoyers
+```
+
+Il tourne en natif sur toute distribution avec une glibc 2.36 ou plus récente (Debian 12,
+Ubuntu 24.04, Fedora 37+…) et une session graphique (GTK 3, présent sur tout bureau standard).
+Le client Flet est embarqué : aucun accès réseau n'est nécessaire au lancement.
+
 ---
 
 ## Pour le mainteneur
@@ -140,6 +154,7 @@ français et LibreOffice les lit sans souci.
 | `generer_suivi_loyers.py` | Moteur : construit le classeur à partir d'une config. |
 | `interface_flet.py` | Interface graphique (Flet) pour l'utilisateur final. |
 | `build-flet.bat` | Construit `SuiviLoyers.exe` sous Windows (PyInstaller + `flet pack`). |
+| `Dockerfile.linux` | Image de build du binaire Linux (`make linux`). |
 | `configs/` | Exemples de configurations (`exemple.yaml`, `minimal.yaml`). |
 | `Dockerfile`, `docker-compose.yml` | Environnement de test du moteur. |
 | `requirements.txt` | Dépendances Python (openpyxl, PyYAML). |

@@ -1,0 +1,33 @@
+Suivi des loyers — application Linux
+====================================
+
+Contenu de cette archive :
+  - SuiviLoyers     : l'application (un seul fichier, sans installation)
+  - LISEZ-MOI.txt   : ce fichier
+
+Lancement
+---------
+Depuis un terminal, dans le dossier extrait :
+
+    ./SuiviLoyers
+
+Ou double-cliquez sur SuiviLoyers dans le gestionnaire de fichiers (selon
+le bureau, il faut parfois autoriser « Exécuter comme un programme » dans
+les propriétés du fichier).
+
+Si le fichier n'est plus exécutable (copie depuis une clé USB, par
+exemple) :
+
+    chmod +x SuiviLoyers
+
+Prérequis
+---------
+  - Une distribution récente : glibc 2.36 ou plus (Debian 12, Ubuntu 24.04,
+    Fedora 37 et suivantes, etc.).
+  - Une session graphique avec GTK 3 (présent sur tout bureau standard :
+    GNOME, KDE, Xfce…).
+
+Aucun accès Internet n'est nécessaire au lancement. Le premier démarrage
+est un peu plus long : l'application se décompresse dans ~/.flet.
+
+Le classeur généré s'ouvre avec Excel ou LibreOffice Calc.
