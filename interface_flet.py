@@ -437,6 +437,9 @@ AIDE = [
         "2. Cliquez sur « Générer le classeur » et choisissez où l'enregistrer.",
         "3. Laissez « Enregistrer la config à côté » activé : un fichier .json du même nom "
         "est créé à côté du classeur. C'est lui que vous rouvrirez avec « Charger config ».",
+        "Ce que vous saisissez ici est aussi sauvegardé en continu : si le logiciel est fermé "
+        "avant d'avoir généré le classeur, il vous propose de reprendre votre saisie au "
+        "lancement suivant.",
     ], False),
     ("Saisir les loyers, dans Excel", ft.Icons.EDIT_NOTE, [
         "Chaque locataire a son onglet (en vert). Chaque mois, tapez les montants reçus et "
@@ -469,8 +472,9 @@ AIDE = [
         "Quand un locataire part, activez « Le locataire est parti » et indiquez sa date de "
         "sortie : son historique reste dans le classeur.",
         "Les saisies sont rattachées au nom et au prénom. Si vous renommez ou supprimez un "
-        "locataire, ses anciennes saisies ne sont pas reportées : le logiciel vous le "
-        "signale après la génération, et elles restent dans la copie de sécurité.",
+        "locataire (le logiciel demande confirmation), ses anciennes saisies ne sont pas "
+        "reportées : le logiciel vous le signale après la génération, et elles restent dans "
+        "la copie de sécurité.",
     ], False),
 ]
 
