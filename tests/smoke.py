@@ -227,6 +227,7 @@ def main() -> int:
     sa.cell(re_ + 1, ea["Part locataire reçue"]).value = 88   # janvier
     sa.cell(re_ + 2, ea["Part locataire reçue"]).value = 99   # février
     wba.save(fa)
+    assert g.compter_mois_saisis(fa) == 2, g.compter_mois_saisis(fa)
     avant_a = fa.read_bytes()
     fn = tmp / "nouveau.xlsx"
     rap = g.RapportGeneration()

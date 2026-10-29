@@ -2025,6 +2025,12 @@ def recolter_irl(wb) -> dict:
     return res
 
 
+def compter_mois_saisis(chemin: Path) -> int:
+    """Mois portant au moins une saisie dans un classeur existant (contrat public pour
+    l'interface : choisir le classeur dont reprendre les saisies)."""
+    return len(recolter_saisies(load_workbook(chemin, data_only=False)))
+
+
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #

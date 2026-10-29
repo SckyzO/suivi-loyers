@@ -14,6 +14,7 @@ Packaging .exe unique  : flet pack interface_flet.py -n SuiviLoyers
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 import math
@@ -186,6 +187,105 @@ def _libelle_compteur(n_total: int, n_affiches: int, n_partis_masques: int) -> s
         s = "s" if n_partis_masques > 1 else ""
         base += f" · {n_partis_masques} parti{s} masqué{s}"
     return base
+
+
+# --- Reprise des saisies : d'où les lire avant de générer -------------------
+# Les saisies ne sont reprises que du fichier remplacé. Générer sous un autre nom
+# partait donc d'un classeur vide, sans prévenir : l'interface mémorise le dernier
+# classeur de chaque bailleur, le propose d'office et demande quand le fichier
+# choisi ne porte pas les saisies attendues.
+
+def _meme_fichier(a: Path, b: Path) -> bool:
+    """Même fichier, quelle que soit l'écriture du chemin (relatif, casse sous Windows)."""
+    return (os.path.normcase(str(Path(a).resolve()))
+            == os.path.normcase(str(Path(b).resolve())))
+
+
+def _classeur_memorise(reglages: dict, slug: str) -> Path | None:
+    """Dernier classeur généré pour ce bailleur (settings.json), s'il existe encore."""
+    classeurs = reglages.get("classeurs")
+    chemin = classeurs.get(slug) if isinstance(classeurs, dict) else None
+    return Path(chemin) if chemin and Path(chemin).is_file() else None
+
+
+def _memoriser_classeur(reglages: dict, slug: str, chemin: Path) -> None:
+    if not isinstance(reglages.get("classeurs"), dict):
+        reglages["classeurs"] = {}
+    reglages["classeurs"][slug] = str(Path(chemin).resolve())
+
+
+def _mois_saisis(chemin: Path) -> int:
+    """Mois saisis dans un classeur ; 0 s'il est illisible (on ne peut rien en reprendre,
+    et s'il s'agit du fichier à remplacer, la génération remontera la vraie erreur)."""
+    try:
+        return moteur.compter_mois_saisis(chemin)
+    except Exception:  # noqa: BLE001 — fichier corrompu ou non-classeur
+        return 0
+
+
+def _cas_reprise(n_sortie: int | None, n_prec: int, sortie_connue: bool) -> str:
+    """Faut-il demander d'où reprendre les saisies avant de générer ?
+
+    `n_sortie` : mois saisis dans le fichier choisi (None s'il n'existe pas encore) ;
+    `n_prec` : mois saisis dans le dernier classeur de ce bailleur quand c'est un autre
+    fichier (0 sinon) ; `sortie_connue` : le fichier choisi EST ce dernier classeur.
+
+    direct   : générer sans question (les saisies sont dans le fichier choisi) ;
+    proposer : fichier neuf ou vide, le dernier classeur a des saisies ;
+    choisir  : les deux fichiers ont des saisies ;
+    premier  : fichier neuf ou vide, aucun autre classeur connu.
+    """
+    if sortie_connue:
+        return "direct"
+    if n_prec > 0:
+        return "choisir" if n_sortie else "proposer"
+    return "direct" if n_sortie else "premier"
+
+
+def _pluriel(n: int, singulier: str, pluriel: str | None = None) -> str:
+    if n <= 1:
+        return f"{n} {singulier}"
+    return f"{n} {pluriel or (singulier if singulier.endswith(('s', 'x')) else singulier + 's')}"
+
+
+def _enumeration(elements: list[str]) -> str:
+    """« a », « a et b », « a, b et c »."""
+    if len(elements) == 1:
+        return elements[0]
+    return ", ".join(elements[:-1]) + " et " + elements[-1]
+
+
+def _lignes_rapport(rapport: moteur.RapportGeneration, sortie: Path) -> list[tuple[str, str]]:
+    """Compte rendu d'une génération : (nature, phrase), nature ∈ ok / info / alerte."""
+    src = rapport.source
+    if src is None:
+        return [("info", "Nouveau classeur : aucune saisie à reprendre.")]
+    sur_place = _meme_fichier(src, sortie)
+    repris = [txt for n, txt in (
+        (rapport.mois_repris, _pluriel(rapport.mois_repris, "mois")),
+        (rapport.charges_reprises,
+         _pluriel(rapport.charges_reprises, "charge réelle", "charges réelles")),
+        (rapport.indices_repris,
+         _pluriel(rapport.indices_repris, "indice IRL", "indices IRL")),
+    ) if n]
+    lignes = []
+    if repris:
+        de = "" if sur_place else f" de « {src.name} »"
+        lignes.append(("ok", f"Saisies reprises{de} : {_enumeration(repris)}."))
+    else:
+        lignes.append(("info", f"Aucune saisie à reprendre dans « {src.name} »."))
+    if rapport.sauvegarde:
+        lignes.append(("info", "Copie de sécurité de l'ancien fichier : "
+                               f"« {rapport.sauvegarde.name} »."))
+    if rapport.ecartees:
+        lignes += [("alerte", f"Non repris : {e.quoi}, {_pluriel(e.nombre, e.unite)} — "
+                              f"{e.motif}.") for e in rapport.ecartees]
+        # Sur place : l'ancien fichier n'existe plus que dans la copie de sécurité ;
+        # depuis un autre classeur : celui-ci n'a pas été modifié.
+        lieu = (rapport.sauvegarde or src) if sur_place else src
+        lignes.append(("alerte", f"Ces saisies restent dans « {lieu.name} » : rien "
+                                 "n'est perdu."))
+    return lignes
 
 
 def _initiales(nom: str, prenom: str) -> str:
@@ -907,6 +1007,14 @@ class AppLoyers:
             self._toast(f"Chargement impossible : {exc}", ok=False)
             return
         self._peupler_depuis(cfg)
+        # « X.json » écrit à côté de « X.xlsx » (Enregistrer la config à côté) : ce
+        # classeur devient le dernier connu du bailleur, proposé à la génération.
+        voisin = p.with_suffix(".xlsx")
+        if voisin.is_file():
+            _memoriser_classeur(self._reglages,
+                                moteur.base_slug(cfg.get("bailleur") or {}) or "bailleur",
+                                voisin)
+            _enregistrer_reglages(self._reglages)
         msg = "Configuration chargée."
         if avertis:
             msg += " Adaptations : " + " ; ".join(avertis)
@@ -960,6 +1068,10 @@ class AppLoyers:
         self._toast(f"Configuration enregistrée : {p.name}")
 
     # --- génération du classeur -------------------------------------------
+    @staticmethod
+    def _slug(cfg: dict) -> str:
+        return moteur.base_slug(cfg["bailleur"]) or "bailleur"
+
     async def _generer(self, _):
         try:
             cfg = moteur.valider_config(self._config())
@@ -967,57 +1079,194 @@ class AppLoyers:
             self._toast(str(exc), ok=False)
             return
         self._cfg_valide = cfg
-        defaut = "Suivi_" + (moteur.base_slug(cfg["bailleur"]) or "bailleur") + ".xlsx"
+        slug = self._slug(cfg)
+        # Le dernier classeur de ce bailleur est proposé d'office : le remplacer reprend
+        # les saisies sans question.
+        precedent = _classeur_memorise(self._reglages, slug)
         chemin = await self._fp.save_file(
-            dialog_title="Générer le classeur", file_name=defaut,
+            dialog_title="Générer le classeur",
+            file_name=precedent.name if precedent else f"Suivi_{slug}.xlsx",
+            initial_directory=str(precedent.parent) if precedent else None,
             allowed_extensions=["xlsx"])
         if not chemin:
             return
         sortie = Path(chemin)
         if sortie.suffix.lower() != ".xlsx":
             sortie = sortie.with_suffix(".xlsx")
-        self._btn_generer.disabled = True
-        self._btn_generer.text = "Génération…"
+        connue = precedent is not None and _meme_fichier(precedent, sortie)
+        n_sortie, n_prec = None, 0
+        if not connue:
+            if sortie.is_file():
+                n_sortie = await asyncio.to_thread(_mois_saisis, sortie)
+            if precedent is not None:
+                n_prec = await asyncio.to_thread(_mois_saisis, precedent)
+        cas = _cas_reprise(n_sortie, n_prec, connue)
+        if cas == "direct":
+            self._lancer_generation(sortie, None)
+        else:
+            self._demander_reprise(cas, sortie, n_sortie, precedent, n_prec)
+
+    def _dialogue(self, titre: str, corps: list[ft.Control], actions: list,
+                  icone=None) -> None:
+        """Dialogue modal au style maison ; largeur fixe pour que le texte passe à la ligne."""
+        self.page.show_dialog(ft.AlertDialog(
+            modal=True, shape=ft.RoundedRectangleBorder(radius=18),
+            bgcolor=ft.Colors.SURFACE, icon=icone,
+            title=ft.Text(titre, weight=ft.FontWeight.W_700),
+            content=ft.Container(ft.Column(corps, spacing=12, tight=True), width=480),
+            actions=actions, actions_alignment=ft.MainAxisAlignment.END))
         self.page.update()
-        threading.Thread(target=self._generer_async, args=(sortie,),
+
+    def _demander_reprise(self, cas: str, sortie: Path, n_sortie: int | None,
+                          precedent: Path | None, n_prec: int):
+        """Le fichier choisi ne porte pas les saisies attendues : demander d'où les
+        reprendre, plutôt que de générer un classeur vide sans prévenir."""
+        def lancer(source: Path | None):
+            def handler(_):
+                self.page.pop_dialog()
+                self._lancer_generation(sortie, source)
+            return handler
+
+        async def choisir_ancien(_):
+            self.page.pop_dialog()
+            fichiers = await self._fp.pick_files(
+                dialog_title="Choisir l'ancien classeur", allowed_extensions=["xlsx"],
+                initial_directory=str(sortie.parent), allow_multiple=False)
+            if fichiers:
+                self._lancer_generation(sortie, Path(fichiers[0].path))
+
+        annuler = ft.TextButton("Annuler", style=STYLE_BTN,
+                                on_click=lambda e: self.page.pop_dialog())
+        neuf = n_sortie is None
+        if cas == "proposer":
+            titre = "Reprendre vos saisies ?"
+            textes = [
+                f"« {sortie.name} » " + ("est un nouveau fichier : il serait créé sans "
+                                         "aucune saisie." if neuf
+                                         else "ne contient aucune saisie."),
+                f"Votre dernier classeur pour ce bailleur, « {precedent.name} », contient "
+                f"{_pluriel(n_prec, 'mois')} de saisies.",
+                "Pour une mise à jour (locataire ajouté, option modifiée…), reprenez-les. "
+                "Ce classeur-là ne sera pas modifié.",
+            ]
+            actions = [annuler,
+                       ft.OutlinedButton("Créer sans saisies", style=STYLE_BTN,
+                                         on_click=lancer(None)),
+                       ft.FilledButton("Reprendre les saisies", icon=ft.Icons.RESTORE,
+                                       style=STYLE_BTN, on_click=lancer(precedent))]
+        elif cas == "choisir":
+            titre = "Quelles saisies reprendre ?"
+            textes = [
+                f"Vous allez remplacer « {sortie.name} », qui contient "
+                f"{_pluriel(n_sortie, 'mois')} de saisies.",
+                f"Votre dernier classeur pour ce bailleur, « {precedent.name} », en "
+                f"contient {_pluriel(n_prec, 'mois')}.",
+                "Une copie de sécurité du fichier remplacé est gardée dans tous les cas.",
+            ]
+            # Le fichier qui a le plus de saisies est mis en avant (égalité : le remplacé).
+            options = [(f"Celles du fichier remplacé ({_pluriel(n_sortie, 'mois')})",
+                        lancer(None), n_sortie),
+                       (f"Celles du dernier classeur ({_pluriel(n_prec, 'mois')})",
+                        lancer(precedent), n_prec)]
+            fort = 1 if n_prec > n_sortie else 0
+            actions = [annuler] + [
+                (ft.FilledButton if i == fort else ft.OutlinedButton)(
+                    libelle, style=STYLE_BTN, on_click=cb)
+                for i, (libelle, cb, _n) in enumerate(options)]
+        else:  # premier
+            titre = "Premier classeur pour ce bailleur ?"
+            textes = [
+                f"« {sortie.name} » " + ("est un nouveau fichier." if neuf
+                                         else "ne contient encore aucune saisie."),
+                "Si vous avez déjà un classeur pour ce bailleur, avec des loyers saisis, "
+                "choisissez-le : ses saisies seront reprises dans le nouveau, sans le "
+                "modifier.",
+            ]
+            actions = [annuler,
+                       ft.OutlinedButton("Reprendre un ancien classeur…",
+                                         icon=ft.Icons.FOLDER_OPEN, style=STYLE_BTN,
+                                         on_click=choisir_ancien),
+                       ft.FilledButton("Créer le classeur", style=STYLE_BTN,
+                                       on_click=lancer(None))]
+        self._dialogue(titre, [ft.Text(t, size=TS_CORPS) for t in textes], actions,
+                       icone=ft.Icon(ft.Icons.RESTORE, color=ft.Colors.PRIMARY))
+
+    def _lancer_generation(self, sortie: Path, source: Path | None):
+        self._btn_generer.disabled = True
+        self._btn_generer.content = "Génération…"   # Flet 1.0 : libellé = `content`
+        self.page.update()
+        threading.Thread(target=self._generer_async, args=(sortie, source),
                          daemon=True).start()
 
-    def _generer_async(self, sortie: Path):
+    def _generer_async(self, sortie: Path, source: Path | None):
+        rapport = moteur.RapportGeneration()
         try:
-            moteur.generer_workbook(self._cfg_valide, sortie)
-            if self._enregistrer_aussi.value:
+            moteur.generer_workbook(self._cfg_valide, sortie, source=source,
+                                    rapport=rapport)
+        except Exception as exc:  # noqa: BLE001 — message du moteur affiché tel quel
+            self._fin_generation()
+            self._alerte("La génération n'a pas abouti", str(exc))
+            return
+        self._fin_generation()
+        _memoriser_classeur(self._reglages, self._slug(self._cfg_valide), sortie)
+        _enregistrer_reglages(self._reglages)
+        lignes = _lignes_rapport(rapport, sortie)
+        if self._enregistrer_aussi.value:
+            try:
                 sortie.with_suffix(".json").write_text(
                     json.dumps(self._config(), ensure_ascii=False, indent=2),
                     encoding="utf-8")
-            ok, msg = True, None
-        except Exception as exc:  # noqa: BLE001
-            ok, msg = False, f"Échec de la génération : {exc}"
-        self._btn_generer.disabled = False
-        self._btn_generer.text = "Générer le classeur"
-        if ok:
-            self._demander_ouvrir_dossier(sortie)
-        else:
-            self._toast(msg, ok=False)
+            except OSError as exc:
+                lignes.append(("alerte", "Configuration non enregistrée à côté du "
+                                         f"classeur : {exc}"))
+        self._afficher_rapport(sortie, rapport, lignes)
 
-    def _demander_ouvrir_dossier(self, sortie: Path):
-        """Classeur généré : propose d'ouvrir le dossier qui le contient."""
+    def _fin_generation(self):
+        self._btn_generer.disabled = False
+        self._btn_generer.content = "Générer le classeur"
+        self.page.update()
+
+    def _afficher_rapport(self, sortie: Path, rapport: moteur.RapportGeneration,
+                          lignes: list[tuple[str, str]]):
+        """Classeur généré : ce qui a été repris, la copie de sécurité, et toute saisie
+        non reprise (avec l'endroit où elle reste). Propose d'ouvrir le dossier."""
+        icones = {"ok": (ft.Icons.CHECK_CIRCLE_OUTLINE, C_OK),
+                  "info": (ft.Icons.INFO_OUTLINE, C_MUTED),
+                  "alerte": (ft.Icons.WARNING_AMBER_ROUNDED, C_PARTI)}
+
+        def ligne(nature: str, texte: str) -> ft.Control:
+            icone, couleur = icones[nature]
+            return ft.Row([ft.Icon(icone, size=18, color=couleur),
+                           ft.Text(texte, size=TS_CORPS, expand=True)],
+                          spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)
+
+        corps = [ft.Column([
+            ft.Text(f"« {sortie.name} »", size=TS_CORPS, weight=ft.FontWeight.W_700),
+            ft.Text(str(sortie.parent), size=TS_LABEL, color=C_MUTED, selectable=True),
+        ], spacing=2, tight=True)]
+        corps += [ligne(n, t) for n, t in lignes if n != "alerte"]
+        alertes = [ligne(n, t) for n, t in lignes if n == "alerte"]
+        if alertes:
+            corps.append(ft.Container(
+                ft.Column(alertes, spacing=8, tight=True), padding=12,
+                bgcolor=ft.Colors.with_opacity(0.12, C_PARTI), border_radius=RAYON))
+
         def ouvrir(_):
             self.page.pop_dialog()
             self._ouvrir_dossier(sortie)
-        dlg = ft.AlertDialog(
-            modal=True, shape=ft.RoundedRectangleBorder(radius=18),
-            bgcolor=ft.Colors.SURFACE,
-            title=ft.Text("Classeur généré", weight=ft.FontWeight.W_700),
-            content=ft.Text(f"« {sortie.name} » a été créé.\n"
-                            "Ouvrir le dossier qui le contient ?"),
-            actions=[
-                ft.TextButton("Fermer", style=STYLE_BTN,
-                              on_click=lambda e: self.page.pop_dialog()),
-                ft.FilledButton("Ouvrir le dossier", icon=ft.Icons.FOLDER_OPEN,
-                                style=STYLE_BTN, on_click=ouvrir),
-            ], actions_alignment=ft.MainAxisAlignment.END)
-        self.page.show_dialog(dlg)
-        self.page.update()
+        self._dialogue(
+            "Classeur mis à jour" if rapport.sauvegarde else "Classeur créé", corps,
+            [ft.TextButton("Fermer", style=STYLE_BTN,
+                           on_click=lambda e: self.page.pop_dialog()),
+             ft.FilledButton("Ouvrir le dossier", icon=ft.Icons.FOLDER_OPEN,
+                             style=STYLE_BTN, on_click=ouvrir)])
+
+    def _alerte(self, titre: str, message: str):
+        """Erreur à lire posément (un bandeau disparaît trop vite)."""
+        self._dialogue(titre, [ft.Text(message, size=TS_CORPS)],
+                       [ft.FilledButton("Fermer", style=STYLE_BTN,
+                                        on_click=lambda e: self.page.pop_dialog())],
+                       icone=ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.ERROR))
 
     def _ouvrir_dossier(self, sortie: Path):
         import subprocess

@@ -7,7 +7,7 @@
 #     make build      # construit l'image Docker
 #     make lint       # lint ruff (bugs/style)
 #     make test       # smoke test du moteur
-#     make test-ui    # test du filtrage de la table (fonctions pures de l'interface)
+#     make test-ui    # fonctions pures de l'interface (filtrage de la table, reprise)
 #     make gen        # génère les classeurs d'exemple dans exemples/
 #     make sync       # source + exemples -> dossier Windows
 #     make clean      # supprime les exemples générés
@@ -51,8 +51,10 @@ test: build ## Smoke test du moteur (structure, modularité, préservation)
 	docker run --rm $(USERFLAG) --entrypoint python -e PYTHONPATH=/app -v "$(CURDIR):/app" $(IMAGE) tests/smoke.py
 
 test-ui: linux-image ## Test des fonctions pures de l'interface (image de build Linux, qui a Flet)
-	docker run --rm $(USERFLAG) -e HOME=/tmp -e PYTHONPATH=/src -v "$(CURDIR):/src" -w /src \
-	  --entrypoint python $(LINUX_BUILD_IMAGE) tests/ui_filtres.py
+	@for t in tests/ui_filtres.py tests/ui_reprise.py; do \
+	  docker run --rm $(USERFLAG) -e HOME=/tmp -e PYTHONPATH=/src -v "$(CURDIR):/src" -w /src \
+	    --entrypoint python $(LINUX_BUILD_IMAGE) $$t || exit 1; \
+	done
 
 sync: sync-win sync-exemples ## Synchronise source + exemples vers Windows
 

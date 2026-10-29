@@ -33,11 +33,12 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: python tests/smoke.py
 
-      # Fonctions pures de l'interface (filtrage de la table) : importer
-      # interface_flet demande Flet, mais aucune fenêtre n'est ouverte.
-      - name: Test du filtrage de l'interface
+      # Fonctions pures de l'interface (filtrage de la table, reprise des saisies) :
+      # importer interface_flet demande Flet, mais aucune fenêtre n'est ouverte.
+      - name: Tests des fonctions de l'interface
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pip install -r requirements-flet.txt
           python tests/ui_filtres.py
+          python tests/ui_reprise.py
