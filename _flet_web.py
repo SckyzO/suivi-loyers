@@ -3,7 +3,8 @@
 partis (partis masqués) | partis_tous (recherche ne trouvant que des partis masqués) |
 readme | readme_dialog | readme_dark (captures du README : bailleur + locataires remplis) |
 reprise_proposer | reprise_choisir | reprise_premier (question avant de générer) |
-rapport | rapport_ecarts (compte rendu après génération)."""
+rapport | rapport_ecarts (compte rendu après génération) | generation (parcours réel de
+génération sous un nouveau nom) | aide (1er lancement : mode d'emploi ouvert d'office)."""
 import os
 from pathlib import Path
 
@@ -29,6 +30,9 @@ SEED = [
 
 
 def main(page):
+    # Le mode d'emploi s'ouvre d'office au 1er lancement : seul l'état « aide » le montre.
+    if STATE != "aide":
+        gui._enregistrer_reglages({**gui._charger_reglages(), "aide_vue": True})
     app = gui.AppLoyers(page)
     if STATE in ("table", "dark", "dialog", "tri", "search", "partis", "partis_tous",
                  "readme", "readme_dialog", "readme_dark"):

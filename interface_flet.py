@@ -332,6 +332,55 @@ def titre_section(texte: str, icone=None) -> ft.Control:
                         margin=ft.Margin.only(top=6, bottom=2))
 
 
+# --- Mode d'emploi intégré (bouton « Aide », ouvert d'office au 1er lancement) ---
+# (titre, icône, paragraphes, mis en avant). Les libellés cités entre « » sont ceux de
+# l'interface : les garder synchronisés. La mise à jour est mise en avant : générer
+# sous un nouveau nom à chaque mise à jour faisait croire à une perte des saisies.
+AIDE = [
+    ("Créer votre classeur", ft.Icons.TABLE_VIEW_ROUNDED, [
+        "1. Renseignez le bailleur et la période, puis ajoutez les locataires avec "
+        "« Ajouter ».",
+        "2. Cliquez sur « Générer le classeur » et choisissez où l'enregistrer.",
+        "3. Laissez « Enregistrer la config à côté » activé : un fichier .json du même nom "
+        "est créé à côté du classeur. C'est lui que vous rouvrirez avec « Charger config ».",
+    ], False),
+    ("Saisir les loyers, dans Excel", ft.Icons.EDIT_NOTE, [
+        "Chaque locataire a son onglet (en vert). Chaque mois, tapez les montants reçus et "
+        "leurs dates dans les cases jaunes : le reste se calcule tout seul.",
+    ], False),
+    ("Mettre à jour le classeur", ft.Icons.SYNC, [
+        "Pour ajouter un locataire, enregistrer un départ ou changer une option :",
+        "1. Fermez le classeur dans Excel.",
+        "2. Cliquez sur « Charger config » et ouvrez le fichier .json qui est à côté du "
+        "classeur.",
+        "3. Faites vos modifications.",
+        "4. Cliquez sur « Générer le classeur », gardez le même fichier (il vous est "
+        "proposé) et acceptez de le remplacer.",
+        "Vos montants déjà saisis sont repris automatiquement, et une copie de sécurité de "
+        "l'ancien fichier est gardée à côté.",
+        "Ne créez pas un nouveau fichier à chaque mise à jour : il ne contiendrait pas vos "
+        "saisies. Si cela arrive, le logiciel vous propose de les reprendre.",
+    ], True),
+    ("Copies de sécurité", ft.Icons.SHIELD_OUTLINED, [
+        "À chaque mise à jour, l'ancien classeur est copié à côté sous le nom « nom du "
+        "classeur.bak-date-heure.xlsx ». Le logiciel ne supprime jamais ces copies.",
+        "Pour revenir en arrière, ouvrez la copie dans Excel et enregistrez-la sous le nom "
+        "du classeur (Fichier > Enregistrer sous).",
+    ], False),
+    ("Garder une version datée", ft.Icons.EVENT_OUTLINED, [
+        "Copiez le fichier dans l'Explorateur de fichiers (clic droit > Copier, puis "
+        "Coller). Ne générez pas sous un autre nom pour cela.",
+    ], False),
+    ("Départ, renommage ou suppression d'un locataire", ft.Icons.PERSON_REMOVE_OUTLINED, [
+        "Quand un locataire part, activez « Le locataire est parti » et indiquez sa date de "
+        "sortie : son historique reste dans le classeur.",
+        "Les saisies sont rattachées au nom et au prénom. Si vous renommez ou supprimez un "
+        "locataire, ses anciennes saisies ne sont pas reportées : le logiciel vous le "
+        "signale après la génération, et elles restent dans la copie de sécurité.",
+    ], False),
+]
+
+
 # ===========================================================================
 #  Champ date : TextField (ISO) + icône calendrier (suffix) -> DatePicker natif
 # ===========================================================================
@@ -605,6 +654,8 @@ class AppLoyers:
         self._appliquer_apparence()
         page.add(self._construire())
         self._rafraichir_table()
+        if not self._reglages.get("aide_vue"):
+            self._ouvrir_aide()
         if self._maj_active:
             self._verifier_maj()
 
@@ -1351,6 +1402,41 @@ class AppLoyers:
     def _ouvrir_reglages(self, _):
         self.page.show_dialog(self._dlg_reglages)
 
+    def _build_aide(self):
+        """Dialogue « Mode d'emploi » construit depuis AIDE (section mise en avant
+        encadrée)."""
+        sections = []
+        for titre, icone, paragraphes, en_avant in AIDE:
+            bloc = ft.Column([titre_section(titre, icone)]
+                             + [ft.Text(p, size=TS_CORPS) for p in paragraphes],
+                             spacing=6, tight=True)
+            if en_avant:
+                bloc = ft.Container(
+                    bloc, padding=ft.Padding.symmetric(vertical=10, horizontal=14),
+                    border_radius=RAYON, border=ft.Border.all(1, ft.Colors.PRIMARY),
+                    bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.PRIMARY))
+            sections.append(bloc)
+        self._dlg_aide = ft.AlertDialog(
+            modal=True, shape=ft.RoundedRectangleBorder(radius=18),
+            bgcolor=ft.Colors.SURFACE,
+            title=ft.Text("Mode d'emploi", weight=ft.FontWeight.W_700),
+            content=ft.Container(width=580, height=500, content=ft.Column(
+                sections, spacing=14, scroll=ft.ScrollMode.AUTO)),
+            actions=[ft.FilledButton("J'ai compris", style=STYLE_BTN,
+                                     on_click=self._fermer_aide)],
+            actions_alignment=ft.MainAxisAlignment.END)
+
+    def _ouvrir_aide(self, _=None):
+        self.page.show_dialog(self._dlg_aide)
+
+    def _fermer_aide(self, _):
+        self.page.pop_dialog()
+        # Ouvert d'office tant qu'il n'a pas été lu une fois (1er lancement, ou première
+        # ouverture d'une version qui l'introduit).
+        if not self._reglages.get("aide_vue"):
+            self._reglages["aide_vue"] = True
+            _enregistrer_reglages(self._reglages)
+
     async def _ouvrir_github(self, _):
         if GITHUB_URL:
             await self._url.launch_url(GITHUB_URL)
@@ -1403,8 +1489,12 @@ class AppLoyers:
                     ft.Text(APP_TITRE, size=TS_DISPLAY, weight=ft.FontWeight.W_800),
                     ft.Text(APP_SOUS_TITRE, size=TS_LABEL, color=C_MUTED),
                 ], spacing=1, tight=True)], spacing=14),
-                ft.IconButton(ft.Icons.SETTINGS_OUTLINED, tooltip="Réglages",
-                              on_click=self._ouvrir_reglages),
+                ft.Row([
+                    ft.TextButton("Aide", icon=ft.Icons.HELP_OUTLINE, style=STYLE_BTN,
+                                  tooltip="Mode d'emploi", on_click=self._ouvrir_aide),
+                    ft.IconButton(ft.Icons.SETTINGS_OUTLINED, tooltip="Réglages",
+                                  on_click=self._ouvrir_reglages),
+                ], spacing=4, tight=True),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=ft.Padding.symmetric(vertical=16, horizontal=24))
 
@@ -1553,7 +1643,10 @@ class AppLoyers:
                     "Écrit une copie de la configuration (.json) à côté du classeur "
                     "généré, pour la recharger et régénérer le suivi plus tard."),
                 ft.Container(expand=True),
-                self._btn_generer,
+                self._avec_aide(
+                    self._btn_generer,
+                    "Pour mettre à jour le classeur, choisissez le même fichier : vos "
+                    "saisies sont reprises et une copie de sécurité est gardée."),
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
             padding=ft.Padding.symmetric(vertical=12, horizontal=24),
             border=ft.Border.only(top=ft.BorderSide(1, C_LINE)))
@@ -1567,6 +1660,7 @@ class AppLoyers:
         # Référence gardée : le registre purge les services non référencés.
         self._url = ft.UrlLauncher()
         self._build_reglages()
+        self._build_aide()
 
         corps = ft.Row([self._sidebar(), self._zone_principale()],
                        spacing=0, expand=True,
