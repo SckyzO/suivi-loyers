@@ -104,6 +104,9 @@ def main() -> int:
     # Les 4 documents imprimables sont cités (la mise en demeure était oubliée).
     for doc in ("Quittance", "Avis d'échéance", "Lettre de relance", "Mise en demeure"):
         assert doc in textes_guide, doc
+    # Mise à jour : régénérer sur le même fichier (sinon le nouveau part sans les saisies).
+    assert "Mettre à jour le classeur" in textes_guide, "section mise à jour absente"
+    assert "même fichier" in textes_guide, "consigne « même fichier » absente du Guide"
     irl = wb["Révision IRL"]
     liens = [irl.cell(r, c).hyperlink.target for r in range(1, 5)
              for c in range(1, 4) if irl.cell(r, c).hyperlink]

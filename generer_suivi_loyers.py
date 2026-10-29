@@ -1895,6 +1895,22 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         r += 1
     r += 1
 
+    # --- Mise à jour : régénérer sur ce même fichier (un nouveau nom part sans saisies) ---
+    r = section(r, "Mettre à jour le classeur")
+    ws.row_dimensions[r].height = 54
+    r = pastille(r, "Méthode", CHARTE.onglet_systeme,
+                 "Pour ajouter un locataire ou changer une option : fermez ce classeur, puis "
+                 "dans le logiciel « Suivi des loyers », chargez la configuration (le fichier "
+                 ".json à côté du classeur), faites la modification et cliquez sur « Générer "
+                 "le classeur » en choisissant ce même fichier. Vos montants saisis sont repris "
+                 "et une copie de sécurité de l'ancien fichier (.bak) est gardée à côté.",
+                 texte_blanc=True)
+    ws.row_dimensions[r].height = 30
+    r = pastille(r, "Attention", CHARTE.partiel,
+                 "Ne générez pas sous un nouveau nom : le nouveau fichier ne contiendrait pas "
+                 "vos saisies. Pour garder une version datée, copiez simplement ce fichier.")
+    r += 1
+
     # --- Code couleur des onglets (rappelle la charte des onglets) ---
     r = section(r, "Repère des onglets")
     r = pastille(r, "", CHARTE.onglet_systeme,
