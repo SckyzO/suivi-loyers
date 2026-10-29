@@ -181,6 +181,40 @@ def main() -> int:
     assert "Ana" in orph, orph
     assert list(tmp.glob("bak.bak-*.xlsx")), "sauvegarde .bak horodatée manquante"
 
+    # Copie de sécurité impossible : la génération s'arrête AVANT d'écraser le classeur.
+    avant = fb.read_bytes()
+    nb_bak = len(list(tmp.glob("bak.bak-*.xlsx")))
+    copie_orig = g.shutil.copy2
+
+    def copie_en_echec(*_a, **_k):
+        raise OSError("disque plein")
+    g.shutil.copy2 = copie_en_echec
+    try:
+        g.generer_workbook(g.valider_config({**bse, "locataires": [
+            {"nom": "Bea", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}), fb)
+        raise AssertionError("la génération aurait dû échouer sans copie de sécurité")
+    except OSError as exc:
+        assert "copie de sécurité" in str(exc).lower(), exc
+    finally:
+        g.shutil.copy2 = copie_orig
+    assert fb.read_bytes() == avant, "classeur écrasé malgré l'échec de la copie de sécurité"
+
+    # Classeur verrouillé (ouvert dans Excel sous Windows ; ici : lecture seule) : échec
+    # explicite, avant tout travail, sans créer de copie ni toucher au fichier.
+    import os
+    if os.geteuid() != 0:  # root ignore les droits : test non significatif
+        fb.chmod(0o444)
+        try:
+            g.generer_workbook(g.valider_config({**bse, "locataires": [
+                {"nom": "Bea", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}), fb)
+            raise AssertionError("la génération aurait dû échouer sur un classeur verrouillé")
+        except PermissionError as exc:
+            assert "fermez-le" in str(exc).lower(), exc
+        finally:
+            fb.chmod(0o644)
+        assert fb.read_bytes() == avant
+        assert len(list(tmp.glob("bak.bak-*.xlsx"))) == nb_bak, "copie créée pour rien"
+
     # Prorata : entrée le 6 janvier (31 jours) -> facteur *26/31 dans le loyer dû.
     fp = tmp / "prorata.xlsx"
     g.generer_workbook(g.valider_config({**bse, "locataires": [

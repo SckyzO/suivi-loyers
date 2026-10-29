@@ -2029,10 +2029,25 @@ def recolter_irl(wb) -> dict:
 # Orchestration
 # --------------------------------------------------------------------------- #
 
+def _verifier_remplacable(sortie: Path) -> None:
+    """Échoue avant tout travail si le classeur existant ne peut pas être remplacé
+    (ouvert dans Excel sous Windows, lecture seule) : rien n'est créé ni modifié."""
+    try:
+        with open(sortie, "r+b"):
+            pass
+    except PermissionError as exc:
+        raise PermissionError(
+            f"Impossible de remplacer « {sortie.name} » : le fichier est sans doute ouvert "
+            "dans Excel (ou en lecture seule). Fermez-le puis relancez la "
+            "génération.") from exc
+
+
 def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
                      orphelins_out: list | None = None) -> Path:
     cfg = valider_config(cfg) if "annee_debut" not in cfg else cfg
     sortie = Path(sortie)
+    if sortie.is_file():
+        _verifier_remplacable(sortie)
 
     # Identité graphique : résout la charte active pour toute la génération.
     global CHARTE
@@ -2104,12 +2119,15 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     sortie.parent.mkdir(parents=True, exist_ok=True)
     # Sauvegarde de secours avant d'écraser (récupération en cas de couac).
     # Nom horodaté : on conserve chaque sauvegarde au lieu d'écraser la précédente.
+    # Sans copie, on n'écrase pas : l'utilisatrice ne fait aucune sauvegarde elle-même.
     if sortie.is_file():
+        horo = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         try:
-            horo = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
             shutil.copy2(sortie, sortie.with_name(f"{sortie.stem}.bak-{horo}.xlsx"))
-        except OSError:
-            pass
+        except OSError as exc:
+            raise OSError(f"Copie de sécurité de « {sortie.name} » impossible ({exc}) : "
+                          "génération annulée, le classeur existant n'a pas été "
+                          "modifié.") from exc
     wb.save(sortie)
     return sortie
 
