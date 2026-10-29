@@ -1,12 +1,14 @@
 # CLAUDE.md : Suivi des loyers
 
 Générateur de classeurs Excel de suivi des loyers (part locataire + part CAF), avec une
-interface graphique pour un usage non technique sous Windows.
+interface graphique pour un usage non technique sous Windows (et Linux depuis la 1.2.0).
 
 ## Public et contraintes
 
 - **Utilisatrice finale** : non technicienne, sous Windows. Elle ne lance que l'`.exe`, jamais
-  Python. Toute l'ergonomie passe par `interface_flet.py`.
+  Python. Toute l'ergonomie passe par `interface_flet.py`. Elle ne fait **aucune sauvegarde**
+  elle-même : l'application doit garantir qu'aucune saisie n'est perdue (cf. règle
+  « Préservation des saisies »).
 - **Mainteneur** : sous WSL, **tout en Docker** (pas de venv local). Le `.exe` se construit
   côté Windows avec `build-flet.bat` (PyInstaller n'est pas multi-plateforme). Le binaire
   **Linux** se construit dans Docker : `make linux` (`Dockerfile.linux`, base bookworm = glibc
@@ -35,7 +37,12 @@ et par l'interface. Garder cette frontière : pas de logique métier dans l'inte
 anciens `page.open`/`close` n'existent plus) ; `FilePicker` est un **service** (`page.services`),
 et ses `pick_files`/`save_file` sont des **coroutines** — les handlers qui les appellent sont
 `async`. Les helpers de layout minuscules ont disparu : utiliser `ft.Padding/Margin/Border.*` et
-`ft.Alignment.CENTER*` (majuscules), pas `ft.padding.*`. Un `TextStyle` de `text_theme` doit
+`ft.Alignment.CENTER*` (majuscules), pas `ft.padding.*`. `page.launch_url()` n'existe plus
+(1.0) : ouvrir une URL via le service `ft.UrlLauncher()` (coroutine, garder une référence sinon
+le registre le purge). Dépréciés en 1.0, retirés en 1.3 : `border_radius`/`border_color`/
+`focused_border_color` des `TextField`/`Dropdown` (à migrer vers `border=OutlineInputBorder(...)`
+avec contrôle visuel). Toute montée mineure de Flet casse l'API : la faire à la main avec rendu
+(Dependabot n'accepte que les patchs). Un `TextStyle` de `text_theme` doit
 porter une couleur explicite (`ft.Colors.ON_SURFACE`) sinon le texte reste blanc en thème clair.
 Réglages persistés par `_charger_reglages`/`_enregistrer_reglages` (→ `%APPDATA%/SuiviLoyers/
 settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
@@ -74,7 +81,11 @@ Flux de données clé :
 - **Préservation des saisies** : toute régénération sur un fichier existant doit passer par
   `recolter_saisies` (qui lit **chaque feuille locataire**, pas un onglet `Suivi` unique) puis
   réinjection via `construire_feuilles_locataires(saisies=...)`. Clé `(nom, année, mois)`.
-  Ne jamais écraser un fichier sans cette reprise quand `preserver=True`.
+  Ne jamais écraser un fichier sans cette reprise quand `preserver=True`. Avant d'écraser,
+  `generer_workbook` copie l'ancien classeur en `<nom>.bak-<horodatage>.xlsx` : ne jamais
+  retirer cette copie. **Exigence produit : aucune perte de saisie, même « au cas où »** ;
+  toute fonction qui supprime ou écarte des données (locataire supprimé ou renommé, période
+  réduite) doit soit les reprendre, soit prévenir l'utilisateur et lui laisser une copie.
 - **Nom de feuille locataire** : passe par `_nom_feuille` (≤ 31 car., caractères interdits,
   unicité), au format « identifiant - Nom ». Toute référence inter-feuilles passe par `_ref`
   (gère espaces et apostrophes).
@@ -117,7 +128,14 @@ make lint       # lint ruff seul (bugs/style ; config dans ruff.toml)
 make test       # smoke test seul (structure, modularité, préservation)
 make test-ui    # fonctions pures de l'interface (filtrage table) — image Dockerfile.linux
 make sync       # code -> dossier Windows, xlsx -> ~/Downloads
+make linux      # binaire Linux -> dist/linux/SuiviLoyers
 ```
+
+Chaque changement visible par l'utilisateur ajoute une ligne sous `[Non publié]` dans
+`CHANGELOG.md` (Keep a Changelog, en français) ; à la release, cette section prend le numéro
+du tag. Les captures du README (`docs/screenshots/`) se refont avec le harnais `_flet_web.py`
+(états `readme`, `readme_dialog`, `readme_dark`, `reglages`) + Playwright, et le classeur via
+LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
 
 Le lint (`ruff.toml`) volontairement n'impose ni la longueur de ligne (E501) ni le tri d'imports
 (isort) : wrapping et regroupement sont manuels.

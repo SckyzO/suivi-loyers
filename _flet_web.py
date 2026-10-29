@@ -1,6 +1,7 @@
 """UI Flet en mode web headless pour test visuel + screenshots. Jetable.
 État piloté par la variable d'env UISTATE : empty | table | dark | dialog |
-partis (partis masqués) | partis_tous (recherche ne trouvant que des partis masqués)."""
+partis (partis masqués) | partis_tous (recherche ne trouvant que des partis masqués) |
+readme | readme_dialog | readme_dark (captures du README : bailleur + locataires remplis)."""
 import os
 import flet as ft
 import interface_flet as gui
@@ -25,7 +26,8 @@ SEED = [
 
 def main(page):
     app = gui.AppLoyers(page)
-    if STATE in ("table", "dark", "dialog", "tri", "search", "partis", "partis_tous"):
+    if STATE in ("table", "dark", "dialog", "tri", "search", "partis", "partis_tous",
+                 "readme", "readme_dialog", "readme_dark"):
         app.locataires = list(SEED)
         app._rafraichir_table()
     if STATE == "tri":
@@ -38,6 +40,20 @@ def main(page):
         app._afficher_partis = app._switch_partis.value = False
         app._recherche = "sophie" if STATE == "partis_tous" else ""
         app._rafraichir_table()
+    if STATE.startswith("readme"):
+        app.b_nom.value, app.b_sci.value = "Les Tilleuls", True
+        app.b_sci_nom.value, app.b_sci_nom.disabled = "SCI Les Tilleuls", False
+        app.b_adresse.value = "12 rue des Lilas, 35000 Rennes"
+        app.b_tel.value, app.b_email.value = "06 12 34 56 78", "contact@les-tilleuls.fr"
+        page.update()
+    if STATE == "readme_dark":
+        app.apparence = "sombre"
+        app._appliquer_apparence()
+    if STATE == "readme_dialog":
+        import threading
+        threading.Timer(1.2, lambda: gui.DialogueLocataire(
+            page, app._modules_courants(), app._adresses_connues(), SEED[1],
+            app._on_loc_valide(1)).ouvrir()).start()
     if STATE == "dark":
         app.apparence = "sombre"
         app._appliquer_apparence()
