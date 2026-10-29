@@ -1,6 +1,6 @@
 # Image de génération des classeurs de suivi des loyers.
 # Aucune installation locale : tout tourne dans ce conteneur.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 

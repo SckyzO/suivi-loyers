@@ -3,7 +3,7 @@
 #   make linux   ->  dist/linux/SuiviLoyers
 # Base Debian bookworm (glibc 2.36) : un binaire PyInstaller ne tourne que sur
 # une glibc >= celle du build ; on reste volontairement sur une base ancienne.
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # binutils : objdump/strip requis par PyInstaller sous Linux.
 RUN apt-get update && apt-get install -y --no-install-recommends binutils \

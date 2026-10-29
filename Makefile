@@ -15,7 +15,7 @@
 
 SHELL := /bin/bash
 IMAGE := suivi-loyers:latest
-RUFF := ghcr.io/astral-sh/ruff:0.15.20   # image officielle ruff (version pinnée)
+RUFF := ghcr.io/astral-sh/ruff:0.17.3   # image officielle ruff (version pinnée)
 COMPOSE := docker compose
 DOWNLOADS := $(HOME)/Downloads
 WIN_PROJECT := $(DOWNLOADS)/Suivi des loyers sur Excel
