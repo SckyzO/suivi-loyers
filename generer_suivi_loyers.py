@@ -242,7 +242,8 @@ COLS_SAISIE = ("caf_recu", "caf_date", "loc_recu", "loc_date")
 # Feuilles « système » (tout le reste = une feuille locataire).
 FEUILLES_SYSTEME = {"Guide", "Locataires", "Données", "Bilan", "Tableau de bord",
                     "Régularisation charges", "Révision IRL",
-                    "Quittance", "Avis d'échéance", "Lettre de relance"}
+                    "Quittance", "Avis d'échéance", "Lettre de relance",
+                    "Mise en demeure"}
 
 TRIMESTRES = ["T1", "T2", "T3", "T4"]
 

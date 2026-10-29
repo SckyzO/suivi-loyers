@@ -66,6 +66,10 @@ def main() -> int:
                 "Quittance", "Avis d'échéance", "Lettre de relance", "Mise en demeure"]
     assert wb.sheetnames == attendus, wb.sheetnames
     assert wb["Données"].sheet_state == "hidden"
+    # Toute feuille qui n'est pas une feuille locataire doit être déclarée « système » :
+    # sinon la reprise des saisies la parcourt comme une feuille locataire.
+    autres = set(wb.sheetnames) - {"Appt 1 - Alice", "Appt 2 - Bob"}
+    assert autres <= g.FEUILLES_SYSTEME, autres - g.FEUILLES_SYSTEME
     # Titre de la quittance = formule conditionnelle (quittance si soldé, sinon reçu partiel).
     titre_q = wb["Quittance"]["B2"].value
     assert titre_q.startswith("=IF("), titre_q
