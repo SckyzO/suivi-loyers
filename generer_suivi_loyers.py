@@ -2034,7 +2034,8 @@ class Ecartee:
     """Saisies lues dans le classeur repris qui n'ont pas pu être replacées."""
     quoi: str      # identité du locataire, « Charges réelles » ou « Indices IRL »
     motif: str     # pourquoi elles n'ont plus de place dans le nouveau classeur
-    nombre: int    # mois, années ou indices concernés
+    nombre: int    # nombre d'éléments concernés…
+    unite: str     # …et leur unité au singulier : « mois », « année » ou « indice »
 
 
 @dataclass
@@ -2074,7 +2075,7 @@ def _bilan_reprise(wb: Workbook, cfg: dict, saisies: dict, saisies_reg: dict,
         else:
             motif = "colonne absente du nouveau classeur"
         ecarts[(nom, motif)] = ecarts.get((nom, motif), 0) + 1
-    rapport.ecartees += [Ecartee(nom, motif, n) for (nom, motif), n in ecarts.items()]
+    rapport.ecartees += [Ecartee(nom, motif, n, "mois") for (nom, motif), n in ecarts.items()]
 
     nouv_reg = recolter_regularisation(wb)
     perdues = 0
@@ -2087,7 +2088,7 @@ def _bilan_reprise(wb: Workbook, cfg: dict, saisies: dict, saisies_reg: dict,
         motif = ("locataire ou année absents du nouveau classeur"
                  if "Régularisation charges" in wb.sheetnames
                  else "onglet Régularisation désactivé")
-        rapport.ecartees.append(Ecartee("Charges réelles", motif, perdues))
+        rapport.ecartees.append(Ecartee("Charges réelles", motif, perdues, "année"))
 
     nouv_irl = recolter_irl(wb).get("indices", {})
     perdus = 0
@@ -2099,7 +2100,7 @@ def _bilan_reprise(wb: Workbook, cfg: dict, saisies: dict, saisies_reg: dict,
     if perdus:
         motif = ("année hors de la période" if "Révision IRL" in wb.sheetnames
                  else "onglet Révision IRL désactivé")
-        rapport.ecartees.append(Ecartee("Indices IRL", motif, perdus))
+        rapport.ecartees.append(Ecartee("Indices IRL", motif, perdus, "indice"))
 
 
 def _verifier_remplacable(sortie: Path) -> None:
