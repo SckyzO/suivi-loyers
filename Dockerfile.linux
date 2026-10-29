@@ -1,0 +1,37 @@
+# Image de build du binaire Linux de l'interface (équivalent de build-flet.bat).
+# Le conteneur ne sert qu'à construire : le binaire produit tourne en natif.
+#   make linux   ->  dist/linux/SuiviLoyers
+# Base Debian bookworm (glibc 2.36) : un binaire PyInstaller ne tourne que sur
+# une glibc >= celle du build ; on reste volontairement sur une base ancienne.
+FROM python:3.12-slim-bookworm
+
+# binutils : objdump/strip requis par PyInstaller sous Linux.
+RUN apt-get update && apt-get install -y --no-install-recommends binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-flet.txt /tmp/
+RUN FLET_VER=$(grep -E '^flet==' /tmp/requirements-flet.txt | cut -d= -f3) \
+    && pip install --no-cache-dir -r /tmp/requirements-flet.txt pyinstaller \
+        "flet-desktop==${FLET_VER}" "flet-cli==${FLET_VER}"
+
+# flet pack embarque l'archive du client Flet sous le nom de la distro du BUILD
+# (debian12), mais au lancement flet_desktop recalcule ce nom d'après la glibc de
+# l'HÔTE (ex. ubuntu24.04 sur une distro récente) : l'archive embarquée n'est pas
+# trouvée et il tente un téléchargement GitHub. Le runtime hook fige la distro du
+# build (setdefault : FLET_LINUX_DISTRO reste surchargeable).
+ENV FLET_LINUX_DISTRO=debian12
+RUN mkdir -p /opt/hooks && printf 'import os\nos.environ.setdefault("FLET_LINUX_DISTRO", "%s")\n' \
+        "$FLET_LINUX_DISTRO" > /opt/hooks/flet_linux_distro.py
+
+WORKDIR /src
+# Mêmes options que build-flet.bat / .github/workflows/build.yml.
+ENTRYPOINT ["flet", "pack", "interface_flet.py", "--yes", \
+            "--name", "SuiviLoyers", \
+            "--product-name", "Suivi des loyers", \
+            "--hidden-import", "yaml", \
+            "--hidden-import", "openpyxl", \
+            "--distpath", "dist/linux", \
+            "--pyinstaller-build-args=--log-level=WARN", \
+            "--pyinstaller-build-args=--runtime-hook=/opt/hooks/flet_linux_distro.py", \
+            "--pyinstaller-build-args=--workpath=/tmp/build", \
+            "--pyinstaller-build-args=--specpath=/tmp"]

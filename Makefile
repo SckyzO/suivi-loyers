@@ -10,6 +10,7 @@
 #     make gen        # génère les classeurs d'exemple dans exemples/
 #     make sync       # source + exemples -> dossier Windows
 #     make clean      # supprime les exemples générés
+#     make linux      # binaire Linux de l'interface -> dist/linux/SuiviLoyers
 
 SHELL := /bin/bash
 IMAGE := suivi-loyers:latest
@@ -18,6 +19,7 @@ COMPOSE := docker compose
 DOWNLOADS := $(HOME)/Downloads
 WIN_PROJECT := $(DOWNLOADS)/Suivi des loyers sur Excel
 EXEMPLES := exemples
+LINUX_BUILD_IMAGE := suivi-loyers-linux-build:latest
 
 # Exécuter les conteneurs avec l'UID/GID courant : pas de fichiers créés en root.
 USERFLAG := --user $(shell id -u):$(shell id -g)
@@ -28,7 +30,7 @@ SRC := generer_suivi_loyers.py requirements.txt \
        Dockerfile docker-compose.yml Makefile README.md CLAUDE.md .gitignore
 
 .DEFAULT_GOAL := all
-.PHONY: all build lint gen test sync sync-win sync-exemples clean
+.PHONY: all build lint gen test sync sync-win sync-exemples clean linux linux-image
 
 all: build lint gen test sync ## Workflow complet de fin de modification
 
@@ -79,3 +81,10 @@ sync-exemples: ## Copie les classeurs d'exemple dans le dossier Windows (exemple
 
 clean: ## Supprime les exemples générés
 	@rm -rf $(EXEMPLES) && echo "$(EXEMPLES)/ nettoyé"
+
+linux-image: ## Image de build Linux (Flet + PyInstaller)
+	docker build -q -f Dockerfile.linux -t $(LINUX_BUILD_IMAGE) . >/dev/null
+
+linux: linux-image ## Binaire Linux de l'interface (flet pack dans Docker) -> dist/linux/SuiviLoyers
+	docker run --rm $(USERFLAG) -e HOME=/tmp -v "$(CURDIR):/src" $(LINUX_BUILD_IMAGE)
+	@echo "Binaire : dist/linux/SuiviLoyers"
