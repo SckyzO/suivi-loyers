@@ -42,3 +42,4 @@ jobs:
           pip install -r requirements-flet.txt
           python tests/ui_filtres.py
           python tests/ui_reprise.py
+          python tests/ui_protection.py

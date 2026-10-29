@@ -51,7 +51,7 @@ test: build ## Smoke test du moteur (structure, modularité, préservation)
 	docker run --rm $(USERFLAG) --entrypoint python -e PYTHONPATH=/app -v "$(CURDIR):/app" $(IMAGE) tests/smoke.py
 
 test-ui: linux-image ## Test des fonctions pures de l'interface (image de build Linux, qui a Flet)
-	@for t in tests/ui_filtres.py tests/ui_reprise.py; do \
+	@for t in tests/ui_filtres.py tests/ui_reprise.py tests/ui_protection.py; do \
 	  docker run --rm $(USERFLAG) -e HOME=/tmp -e PYTHONPATH=/src -v "$(CURDIR):/src" -w /src \
 	    --entrypoint python $(LINUX_BUILD_IMAGE) $$t || exit 1; \
 	done

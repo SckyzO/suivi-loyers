@@ -5,7 +5,8 @@ readme | readme_dialog | readme_dark | readme_reprise (captures du README : bail
 locataires remplis) |
 reprise_proposer | reprise_choisir | reprise_premier (question avant de générer) |
 rapport | rapport_ecarts (compte rendu après génération) | generation (parcours réel de
-génération sous un nouveau nom) | aide (1er lancement : mode d'emploi ouvert d'office)."""
+génération sous un nouveau nom) | aide (1er lancement : mode d'emploi ouvert d'office) |
+suppression | suppression_parti (confirmation avant de supprimer un locataire)."""
 import os
 from pathlib import Path
 
@@ -36,7 +37,8 @@ def main(page):
         gui._enregistrer_reglages({**gui._charger_reglages(), "aide_vue": True})
     app = gui.AppLoyers(page)
     if STATE in ("table", "dark", "dialog", "tri", "search", "partis", "partis_tous",
-                 "readme", "readme_dialog", "readme_dark", "readme_reprise"):
+                 "readme", "readme_dialog", "readme_dark", "readme_reprise",
+                 "suppression", "suppression_parti"):
         app.locataires = list(SEED)
         app._rafraichir_table()
     if STATE == "tri":
@@ -74,6 +76,10 @@ def main(page):
     if STATE == "reglages":
         import threading
         threading.Timer(3.5, lambda: app.page.show_dialog(app._dlg_reglages)).start()
+    if STATE in ("suppression", "suppression_parti"):
+        import threading
+        idx = 1 if STATE == "suppression_parti" else 0     # SEED[1] = Bernard, parti
+        threading.Timer(3.5, lambda: app._demander_suppression(idx)).start()
     # Reprise des saisies : questions posées avant de générer, puis compte rendu.
     ancien = Path("/data/Suivi_Les_Tilleuls AU 28-09-2026.xlsx")
     nouveau = Path("/data/Suivi_Les_Tilleuls MISE A JOUR 29-10-26.xlsx")

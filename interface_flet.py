@@ -153,6 +153,24 @@ def _est_parti(loc: dict) -> bool:
     return bool(loc.get("date_sortie"))
 
 
+def _nom_complet(loc: dict) -> str:
+    return " ".join(x for x in (loc.get("nom", ""), loc.get("prenom", "")) if x)
+
+
+def _messages_suppression(loc: dict) -> tuple[str, list[str], bool]:
+    """Titre, paragraphes et « proposer d'indiquer un départ ? » du dialogue qui confirme
+    la suppression d'un locataire : ses saisies ne seraient plus reportées."""
+    paragraphes = [
+        "Il sera retiré de la liste. À la prochaine génération, son onglet et ses saisies ne "
+        "seront plus dans le classeur : ils resteront dans la copie de sécurité de l'ancien "
+        "fichier."]
+    depart = not _est_parti(loc)
+    if depart:
+        paragraphes.append("S'il a quitté le logement, indiquez plutôt une date de sortie : "
+                           "son historique reste alors dans le classeur.")
+    return f"Supprimer {_nom_complet(loc) or 'ce locataire'} ?", paragraphes, depart
+
+
 def _texte_recherche(loc: dict) -> str:
     return " ".join(
         str(loc.get(k, "") or "")
@@ -785,6 +803,31 @@ class AppLoyers:
             self._rafraichir_table()
         return cb
 
+    def _demander_suppression(self, idx: int):
+        """Confirmer avant de supprimer : ses saisies ne seraient plus reportées dans le
+        classeur. Pour un locataire encore présent, propose d'indiquer plutôt son départ."""
+        titre, paragraphes, depart = _messages_suppression(self.locataires[idx])
+
+        def supprimer(_):
+            self.page.pop_dialog()
+            self._supprimer_loc(idx)
+
+        def indiquer_depart(_):
+            self.page.pop_dialog()
+            self._modifier_loc(idx)
+
+        actions = [ft.TextButton("Annuler", style=STYLE_BTN,
+                                 on_click=lambda e: self.page.pop_dialog())]
+        if depart:
+            actions.append(ft.OutlinedButton("Indiquer un départ", icon=ft.Icons.LOGOUT,
+                                             style=STYLE_BTN, on_click=indiquer_depart))
+        actions.append(ft.FilledButton(
+            "Supprimer", icon=ft.Icons.DELETE_OUTLINE, on_click=supprimer,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=RAYON),
+                                 bgcolor=ft.Colors.ERROR, color=ft.Colors.ON_ERROR)))
+        self._dialogue(titre, [ft.Text(p, size=TS_CORPS) for p in paragraphes], actions,
+                       icone=ft.Icon(ft.Icons.DELETE_OUTLINE, color=ft.Colors.ERROR))
+
     def _supprimer_loc(self, idx: int):
         del self.locataires[idx]
         self._rafraichir_table()
@@ -815,7 +858,7 @@ class AppLoyers:
             return iso
 
     def _nom_complet(self, loc: dict) -> str:
-        return " ".join(x for x in (loc.get("nom", ""), loc.get("prenom", "")) if x)
+        return _nom_complet(loc)
 
     def _loyer_loc(self, loc: dict) -> float:
         if self.split_actuel():
@@ -938,7 +981,7 @@ class AppLoyers:
                               on_click=lambda e, k=orig_idx: self._modifier_loc(k)),
                 ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_size=18,
                               icon_color=ft.Colors.ERROR, tooltip="Supprimer",
-                              on_click=lambda e, k=orig_idx: self._supprimer_loc(k)),
+                              on_click=lambda e, k=orig_idx: self._demander_suppression(k)),
             ], spacing=0, tight=True, alignment=ft.MainAxisAlignment.END)
         else:
             if cle == "bien":
