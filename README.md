@@ -47,6 +47,10 @@ mois : celles qui n'ont plus de place dans le nouveau classeur (locataire renomm
 supprimé, mois sorti de la période, option CAF désactivée…) sont signalées, avec le fichier
 où elles restent.
 
+Ce que vous saisissez dans le logiciel (bailleur, locataires, options) est sauvegardé en
+continu. S'il est fermé avant d'avoir généré le classeur ou enregistré la configuration, il
+propose de reprendre cette saisie au lancement suivant.
+
 Le bouton **Aide**, en haut à droite, ouvre un mode d'emploi. Il s'affiche tout seul au
 premier lancement.
 
@@ -94,6 +98,9 @@ La liste se trie en cliquant sur l'en-tête d'une colonne, et se filtre avec le 
 **Rechercher** (nom, prénom, bien ou adresse). L'interrupteur **Afficher les locataires
 partis** masque les anciens locataires de la liste. Il ne touche qu'à l'affichage : le
 classeur les garde tous, avec leur historique.
+
+Supprimer un locataire demande une confirmation : ses saisies ne seraient plus reportées
+dans le classeur. Pour un locataire qui part, indiquez plutôt une date de sortie.
 
 ### Changer de locataire
 
@@ -172,7 +179,7 @@ synchronisation vers le dossier Windows.
 ```bash
 make            # build + lint + exemples + tests + sync
 make test       # smoke test du moteur
-make test-ui    # fonctions pures de l'interface (filtrage de la liste, reprise)
+make test-ui    # fonctions pures de l'interface (filtrage, reprise, protection de la saisie)
 make linux      # binaire Linux -> dist/linux/SuiviLoyers
 ```
 
@@ -205,11 +212,11 @@ Excel les affiche en français et LibreOffice les lit sans souci.
 | `generer_suivi_loyers.py` | Moteur : construit le classeur à partir d'une configuration. |
 | `interface_flet.py` | Interface graphique (Flet). |
 | `configs/` | Configurations d'exemple (`exemple.yaml`, `minimal.yaml`). |
-| `tests/` | `smoke.py` (moteur), `ui_filtres.py` et `ui_reprise.py` (fonctions de l'interface : filtrage de la liste, reprise des saisies). |
+| `tests/` | `smoke.py` (moteur), `ui_filtres.py`, `ui_reprise.py` et `ui_protection.py` (fonctions de l'interface), `verrou_windows.py` (classeur ouvert dans Excel, Windows seulement). |
 | `build-flet.bat` | Construit `SuiviLoyers.exe` sous Windows. |
 | `Dockerfile.linux`, `packaging/` | Build du binaire Linux et son runtime hook PyInstaller. |
 | `Dockerfile`, `docker-compose.yml` | Environnement du moteur (génération, tests). |
-| `.github/workflows/` | CI (lint + tests) et build des exécutables. |
+| `.github/workflows/` | CI (lint + tests sous Linux et Windows) et build des exécutables. |
 
 ### Modules de la configuration
 

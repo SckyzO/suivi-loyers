@@ -18,7 +18,9 @@ interface graphique pour un usage non technique sous Windows (et Linux depuis la
   `LD_LIBRARY_PATH` d'origine (sinon le client Flutter hérite des libs PyInstaller, Mesa de
   l'hôte échoue : « No provider of eglGetPlatformDisplayEXT », le client meurt). CI :
   `build.yml` (jobs `windows` + `linux` avec test de lancement sous Xvfb, puis `release`
-  unique sur tag `v*`).
+  unique sur tag `v*`) ; `ci.yml` lance lint + tests sous Linux **et** sous Windows (job
+  `windows` : smoke, tests de l'interface, et `tests/verrou_windows.py` qui reproduit le
+  verrou d'un classeur ouvert dans Excel avec `CreateFileW`).
 - **Langue** : interface, classeur généré et documentation en **français** (audience française).
 
 ## Architecture
@@ -58,6 +60,16 @@ classeur), l'interface demande d'où les reprendre (`_cas_reprise`) puis affiche
 rendu (`_lignes_rapport`) : fonctions pures testées par `tests/ui_reprise.py`. La clé
 `aide_vue` dit si le mode d'emploi intégré (liste `AIDE`, dont les libellés cités doivent
 rester ceux de l'interface) a été lu ; sinon il s'ouvre au démarrage.
+
+**Saisie en cours** : recopiée dans `session.json` (à côté de `settings.json`, écriture
+atomique) toutes les 3 s et après chaque `_rafraichir_table`, avec un drapeau `propre` =
+« déjà dans un .json ». Tout code qui charge ou écrit la config dans un .json doit appeler
+`_marquer_propre(cfg)`, sinon le prochain lancement proposerait à tort une reprise. Au
+démarrage, seule une session non propre et non vide est proposée (sinon formulaire vierge,
+comme avant) ; la sauvegarde automatique ne démarre qu'après la réponse. Une session écartée
+(refusée, ou remplacée par un chargement confirmé) part dans `session-ecartee.json`, jamais
+supprimée. Supprimer un locataire passe par `_demander_suppression` (confirmation). Règles
+pures testées par `tests/ui_protection.py`.
 
 ## Onglets du classeur
 
@@ -142,7 +154,7 @@ génération des classeurs d'exemple, `tests/smoke.py`, puis sync (code vers le 
 make            # build + lint + gen + test + sync (workflow complet)
 make lint       # lint ruff seul (bugs/style ; config dans ruff.toml)
 make test       # smoke test seul (structure, modularité, préservation)
-make test-ui    # fonctions pures de l'interface (filtrage, reprise) — image Dockerfile.linux
+make test-ui    # fonctions pures de l'interface (filtrage, reprise, protection) — image Dockerfile.linux
 make sync       # code -> dossier Windows, xlsx -> ~/Downloads
 make linux      # binaire Linux -> dist/linux/SuiviLoyers
 ```
@@ -151,8 +163,9 @@ Chaque changement visible par l'utilisateur ajoute une ligne sous `[Non publié]
 `CHANGELOG.md` (Keep a Changelog, en français) ; à la release, cette section prend le numéro
 du tag. Les captures du README (`docs/screenshots/`) se refont avec le harnais `_flet_web.py`
 (états `readme`, `readme_dialog`, `readme_dark`, `readme_reprise`, `reglages`) + Playwright ;
-l'état `generation` rejoue une vraie génération sous un nouveau nom (sans dialogue natif). Le
-classeur se rend via LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
+l'état `generation` rejoue une vraie génération sous un nouveau nom (sans dialogue natif),
+l'état `session` un redémarrage sur une saisie non enregistrée. Le classeur se rend via
+LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
 
 Le lint (`ruff.toml`) volontairement n'impose ni la longueur de ligne (E501) ni le tri d'imports
 (isort) : wrapping et regroupement sont manuels.

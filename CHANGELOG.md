@@ -6,6 +6,16 @@ Les changements notables de chaque version. Le format suit
 
 ## [Non publié]
 
+### Ajouté
+
+- Ce qui est saisi dans le logiciel (bailleur, locataires, options) est sauvegardé en continu.
+  Si le logiciel est fermé avant d'avoir généré le classeur ou enregistré la configuration,
+  il propose de reprendre cette saisie au lancement suivant.
+- Supprimer un locataire demande une confirmation, qui rappelle que ses saisies ne seront
+  plus reportées dans le classeur et propose plutôt d'indiquer son départ.
+- Charger une configuration alors que la saisie en cours n'est pas enregistrée demande une
+  confirmation. Une saisie écartée est mise de côté, jamais effacée.
+
 ## [1.2.1] - 2026-10-29
 
 ### Ajouté
