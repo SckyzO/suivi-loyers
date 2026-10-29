@@ -211,7 +211,9 @@ def main() -> int:
     # Classeur verrouillé (ouvert dans Excel sous Windows ; ici : lecture seule) : échec
     # explicite, avant tout travail, sans créer de copie ni toucher au fichier.
     import os
-    if os.geteuid() != 0:  # root ignore les droits : test non significatif
+    # root ignore les droits sous Linux (test non significatif) ; Windows n'a pas de
+    # geteuid et y pose l'attribut lecture seule (test valable).
+    if getattr(os, "geteuid", lambda: 1)() != 0:
         fb.chmod(0o444)
         try:
             g.generer_workbook(g.valider_config({**bse, "locataires": [

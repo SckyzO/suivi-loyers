@@ -43,3 +43,36 @@ jobs:
           python tests/ui_filtres.py
           python tests/ui_reprise.py
           python tests/ui_protection.py
+
+  # Les utilisateurs sont sous Windows : le moteur et les fonctions de l'interface y
+  # tournent aussi (chemins, casse, APPDATA), plus le verrou d'un classeur ouvert dans
+  # Excel, reproduit avec l'API Windows.
+  windows:
+    runs-on: windows-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-flet.txt
+
+      - name: Smoke test du moteur
+        run: python tests/smoke.py
+
+      - name: Classeur ouvert dans Excel (verrou Windows)
+        run: python tests/verrou_windows.py
+
+      - name: Tests des fonctions de l'interface
+        run: |
+          python tests/ui_filtres.py
+          python tests/ui_reprise.py
+          python tests/ui_protection.py
