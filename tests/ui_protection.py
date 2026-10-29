@@ -1,11 +1,15 @@
 """Test des protections de la saisie en cours côté interface (sans affichage).
 
 Couvre les fonctions pures de `interface_flet` qui évitent de perdre ce qui est saisi dans
-le logiciel : confirmation avant de supprimer un locataire. Importer `interface_flet`
+le logiciel : confirmation avant de supprimer un locataire, sauvegarde automatique de la
+saisie en cours (session.json) et sa reprise au démarrage. Importer `interface_flet`
 demande Flet, mais aucune fenêtre n'est ouverte.
 """
 
+import os
 import sys
+import tempfile
+from pathlib import Path
 
 import interface_flet as ui
 
@@ -25,6 +29,45 @@ def main() -> int:
     assert titre == "Supprimer Bernard Sophie ?" and not depart, (titre, depart)
     assert len(paragraphes) == 1, paragraphes
     assert ui._messages_suppression({"nom": "", "prenom": ""})[0] == "Supprimer ce locataire ?"
+
+    # --- Saisie en cours : y a-t-il quelque chose à protéger ? ---
+    assert not ui._a_du_contenu({})
+    assert not ui._a_du_contenu({"bailleur": {"nom": "  "}, "locataires": []})
+    assert ui._a_du_contenu({"bailleur": {"nom": "Durand"}})
+    assert ui._a_du_contenu({"bailleur": {}, "locataires": [{"nom": "Ana"}]})
+    # L'empreinte ne dépend pas de l'ordre des clés (comparaison avec l'état enregistré).
+    assert ui._empreinte({"a": 1, "b": 2}) == ui._empreinte({"b": 2, "a": 1})
+
+    # --- Session précédente : la proposer seulement si elle n'était pas enregistrée ---
+    cfg = {"bailleur": {"nom": "Durand", "sci": True, "sci_nom": "SCI Lilas"},
+           "locataires": [{"nom": "Ana"}, {"nom": "Bob"}, {"nom": "Eve"}]}
+    assert ui._session_a_reprendre({}) is None
+    assert ui._session_a_reprendre({"config": cfg, "propre": True}) is None
+    assert ui._session_a_reprendre({"config": {"bailleur": {}}, "propre": False}) is None
+    assert ui._session_a_reprendre({"config": "abîmée", "propre": False}) is None
+    assert ui._session_a_reprendre({"config": cfg, "propre": False}) == cfg
+    assert ui._session_a_reprendre({"config": cfg}) is None   # sans drapeau : prudence
+    session = {"config": cfg, "propre": False, "horodatage": "2026-10-29T18:34:05"}
+    assert ui._resume_session(session) == \
+        "SCI Lilas Durand — 3 locataires, modifiée le 29/10/2026 à 18:34.", \
+        ui._resume_session(session)
+    assert ui._resume_session({"config": {"bailleur": {}, "locataires": [{"nom": "A"}]}}) \
+        == "Bailleur sans nom — 1 locataire."
+
+    # --- Écriture, relecture et mise de côté du fichier de session ---
+    os.environ["APPDATA"] = tempfile.mkdtemp()           # _fichier_reglages() le lit à l'appel
+    dossier = Path(os.environ["APPDATA"]) / "SuiviLoyers"
+    assert ui._charger_session() == {}                   # aucune session : rien à reprendre
+    ui._enregistrer_session(cfg, propre=False)
+    relu = ui._charger_session()
+    assert relu["config"] == cfg and relu["propre"] is False and relu["horodatage"], relu
+    assert sorted(p.name for p in dossier.iterdir()) == ["session.json"], \
+        "écriture atomique : aucun fichier temporaire ne doit rester"
+    ui._archiver_session()                               # session écartée : mise de côté
+    assert ui._charger_session() == {}
+    assert (dossier / "session-ecartee.json").is_file()
+    (dossier / "session.json").write_text("{ illisible", encoding="utf-8")
+    assert ui._charger_session() == {}                   # corrompue : ignorée, pas d'erreur
 
     print("UI PROTECTION OK")
     return 0

@@ -6,7 +6,9 @@ locataires remplis) |
 reprise_proposer | reprise_choisir | reprise_premier (question avant de générer) |
 rapport | rapport_ecarts (compte rendu après génération) | generation (parcours réel de
 génération sous un nouveau nom) | aide (1er lancement : mode d'emploi ouvert d'office) |
-suppression | suppression_parti (confirmation avant de supprimer un locataire)."""
+suppression | suppression_parti (confirmation avant de supprimer un locataire) |
+session (1re connexion : saisie non enregistrée ; 2e connexion = redémarrage : reprise
+proposée)."""
 import os
 from pathlib import Path
 
@@ -76,6 +78,17 @@ def main(page):
     if STATE == "reglages":
         import threading
         threading.Timer(3.5, lambda: app.page.show_dialog(app._dlg_reglages)).start()
+    if STATE == "session" and not gui._session_a_reprendre(gui._charger_session()):
+        # 1re connexion : une saisie jamais enregistrée (la 2e connexion, comme un
+        # redémarrage du logiciel, doit proposer de la reprendre).
+        import threading
+        app.b_nom.value = "Les Tilleuls"
+        app.locataires = list(SEED)
+        app._rafraichir_table()                          # sauvegarde immédiate
+        threading.Timer(4, lambda: print(
+            "SESSION", gui._charger_session().get("propre"),
+            len(gui._charger_session().get("config", {}).get("locataires", [])),
+            flush=True)).start()
     if STATE in ("suppression", "suppression_parti"):
         import threading
         idx = 1 if STATE == "suppression_parti" else 0     # SEED[1] = Bernard, parti

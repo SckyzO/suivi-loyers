@@ -21,6 +21,7 @@ import math
 import os
 import re
 import threading
+import time
 from pathlib import Path
 
 import flet as ft
@@ -304,6 +305,81 @@ def _lignes_rapport(rapport: moteur.RapportGeneration, sortie: Path) -> list[tup
         lignes.append(("alerte", f"Ces saisies restent dans « {lieu.name} » : rien "
                                  "n'est perdu."))
     return lignes
+
+
+# --- Saisie en cours : sauvegarde automatique (session.json) -----------------
+# Bailleur, locataires et options n'existaient qu'en mémoire jusqu'à « Enregistrer
+# config » ou une génération : fermer le logiciel les perdait. L'état est recopié en
+# continu ; au démarrage, une saisie qui n'avait pas été enregistrée est proposée à la
+# reprise. Une session écartée est mise de côté (session-ecartee.json), jamais effacée.
+
+def _fichier_session() -> Path:
+    return _fichier_reglages().with_name("session.json")
+
+
+def _a_du_contenu(cfg: dict) -> bool:
+    """Quelque chose à protéger : un bailleur nommé ou au moins un locataire."""
+    bailleur = cfg.get("bailleur") or {}
+    return bool(cfg.get("locataires") or str(bailleur.get("nom") or "").strip())
+
+
+def _empreinte(cfg: dict) -> str:
+    """Forme canonique d'une config, pour la comparer à l'état enregistré."""
+    return json.dumps(cfg, sort_keys=True, ensure_ascii=False)
+
+
+def _charger_session() -> dict:
+    try:
+        data = json.loads(_fichier_session().read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — absente ou illisible -> rien à reprendre
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _enregistrer_session(cfg: dict, propre: bool) -> None:
+    """Écrit la saisie en cours. Fichier temporaire puis remplacement : une coupure en
+    pleine écriture ne laisse jamais une session illisible."""
+    try:
+        f = _fichier_session()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(
+            {"config": cfg, "propre": propre,
+             "horodatage": dt.datetime.now().isoformat(timespec="seconds")},
+            ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, f)
+    except OSError:
+        pass  # best-effort : retentée au cycle suivant, ne bloque jamais le logiciel
+
+
+def _archiver_session() -> None:
+    """Met la session de côté (session-ecartee.json) au lieu de la laisser écraser."""
+    try:
+        os.replace(_fichier_session(), _fichier_session().with_name("session-ecartee.json"))
+    except OSError:
+        pass  # pas de session : rien à mettre de côté
+
+
+def _session_a_reprendre(session: dict) -> dict | None:
+    """Config d'une session précédente à proposer à la reprise : seulement si elle portait
+    des modifications non enregistrées (sinon elles sont déjà dans un .json)."""
+    cfg = session.get("config")
+    if session.get("propre", True) or not isinstance(cfg, dict) or not _a_du_contenu(cfg):
+        return None
+    return cfg
+
+
+def _resume_session(session: dict) -> str:
+    """« SCI Lilas Durand — 3 locataires, modifiée le 29/10/2026 à 18:34. »"""
+    cfg = session["config"]
+    nom = moteur.base_fichier(cfg.get("bailleur") or {}) or "Bailleur sans nom"
+    texte = f"{nom} — {_pluriel(len(cfg.get('locataires') or []), 'locataire')}"
+    try:
+        quand = dt.datetime.fromisoformat(session.get("horodatage") or "")
+        texte += f", modifiée le {quand:%d/%m/%Y à %H:%M}"
+    except ValueError:
+        pass
+    return texte + "."
 
 
 def _initiales(nom: str, prenom: str) -> str:
@@ -663,6 +739,11 @@ class AppLoyers:
         self._maj_active = bool(self._reglages.get("verifier_maj", True))
         # Toggle « Afficher les locataires partis » : affichés par défaut (non-régression).
         self._afficher_partis = bool(self._reglages.get("afficher_partis", True))
+        # Sauvegarde automatique de la saisie en cours (session.json).
+        self._verrou_session = threading.Lock()
+        self._session_ecrite = None    # (empreinte, propre) déjà écrite
+        self._etat_propre = None       # empreinte du dernier état enregistré dans un .json
+        self._autosave_actif = False   # pas avant la réponse à « Reprendre votre saisie ? »
         page.title = APP_TITRE
         page.window.width = 1180
         page.window.height = 800
@@ -672,8 +753,15 @@ class AppLoyers:
         self._appliquer_apparence()
         page.add(self._construire())
         self._rafraichir_table()
+        # Formulaire vierge : rien à protéger tant qu'il n'a pas changé.
+        self._etat_propre = _empreinte(self._config())
         if not self._reglages.get("aide_vue"):
             self._ouvrir_aide()
+        session = _charger_session()
+        if _session_a_reprendre(session):
+            self._proposer_session(session)   # empilé au-dessus de l'aide éventuelle
+        else:
+            self._demarrer_autosave()
         if self._maj_active:
             self._verifier_maj()
 
@@ -779,6 +867,90 @@ class AppLoyers:
             "police": self.police.value or moteur.POLICE_DEFAUT,
             "locataires": self.locataires,
         }
+
+    # --- saisie en cours : sauvegarde automatique ---------------------------
+    def _demarrer_autosave(self):
+        """Recopie la saisie toutes les 3 s (les champs texte n'ont pas d'événement
+        commun) ; les actions sur la liste l'écrivent aussitôt (_rafraichir_table)."""
+        self._autosave_actif = True
+        self._sauver_session()
+
+        def boucle():
+            while True:
+                time.sleep(3)
+                self._sauver_session()
+        threading.Thread(target=boucle, daemon=True).start()
+
+    def _sauver_session(self):
+        """Écrit la saisie en cours si elle a changé depuis la dernière écriture."""
+        if not self._autosave_actif:
+            return
+        try:
+            cfg = self._config()
+        except ValueError:  # année en cours de frappe (« 20a6 ») : on attend la suite
+            return
+        empreinte = _empreinte(cfg)
+        propre = empreinte == self._etat_propre or not _a_du_contenu(cfg)
+        with self._verrou_session:
+            if (empreinte, propre) != self._session_ecrite:
+                _enregistrer_session(cfg, propre)
+                self._session_ecrite = (empreinte, propre)
+
+    def _marquer_propre(self, cfg: dict | None = None):
+        """La saisie vient d'être chargée depuis, ou écrite dans, un .json : rien à
+        reprendre au prochain lancement tant qu'elle ne change pas."""
+        self._etat_propre = _empreinte(cfg if cfg is not None else self._config())
+        self._sauver_session()
+
+    def _modifs_non_enregistrees(self) -> dict | None:
+        """Config en cours si elle porte des modifications absentes de tout .json."""
+        try:
+            cfg = self._config()
+        except ValueError:  # année invalide : comparaison impossible, supposée modifiée
+            cfg = {"bailleur": {"nom": self.b_nom.value}, "locataires": self.locataires}
+            return cfg if _a_du_contenu(cfg) else None
+        if _a_du_contenu(cfg) and _empreinte(cfg) != self._etat_propre:
+            return cfg
+        return None
+
+    def _mettre_session_de_cote(self):
+        _archiver_session()
+        with self._verrou_session:
+            self._session_ecrite = None    # la prochaine écriture repart d'un fichier neuf
+
+    def _proposer_session(self, session: dict):
+        """Le logiciel a été fermé sur une saisie non enregistrée : proposer de la
+        reprendre. La sauvegarde automatique démarre après la réponse (elle écraserait
+        sinon cette session par le formulaire vierge)."""
+        def reprendre(_):
+            self.page.pop_dialog()
+            try:
+                cfg, _avertis = moteur.migrer_config(session["config"])
+            except Exception as exc:  # noqa: BLE001 — session abîmée : mise de côté
+                _archiver_session()
+                self._alerte("Reprise impossible",
+                             f"La saisie précédente est illisible ({exc}). Elle a été mise "
+                             "de côté.")
+            else:
+                self._peupler_depuis(cfg)   # reste « non enregistrée » jusqu'au .json
+                self._toast("Saisie reprise. Pensez à générer le classeur ou à "
+                            "enregistrer la configuration.")
+            self._demarrer_autosave()
+
+        def ignorer(_):
+            self.page.pop_dialog()
+            _archiver_session()
+            self._demarrer_autosave()
+
+        self._dialogue(
+            "Reprendre votre saisie ?",
+            [ft.Text("Le logiciel a été fermé avant que vos dernières modifications soient "
+                     "enregistrées :", size=TS_CORPS),
+             ft.Text(_resume_session(session), size=TS_CORPS, weight=ft.FontWeight.W_600)],
+            [ft.TextButton("Ne pas reprendre", style=STYLE_BTN, on_click=ignorer),
+             ft.FilledButton("Reprendre", icon=ft.Icons.RESTORE, style=STYLE_BTN,
+                             on_click=reprendre)],
+            icone=ft.Icon(ft.Icons.RESTORE, color=ft.Colors.PRIMARY))
 
     # --- locataires --------------------------------------------------------
     def _adresses_connues(self) -> list[str]:
@@ -1054,6 +1226,8 @@ class AppLoyers:
         # Sans aucun parti, le toggle n'aurait pas d'effet : grisé.
         self._switch_partis.disabled = not any(_est_parti(loc) for loc in self.locataires)
         self.page.update()
+        # Ajout, modification ou suppression d'un locataire : sauvegardé aussitôt.
+        self._sauver_session()
 
     def _etat_vide(self) -> ft.Control:
         return ft.Container(
@@ -1082,6 +1256,32 @@ class AppLoyers:
 
     # --- charger / enregistrer config -------------------------------------
     async def _charger_config(self, _):
+        en_cours = self._modifs_non_enregistrees()
+        if en_cours is None:
+            await self._choisir_config()
+            return
+
+        async def charger_quand_meme(_):
+            self.page.pop_dialog()
+            # La saisie remplacée reste récupérable (session-ecartee.json).
+            self._mettre_session_de_cote()
+            await self._choisir_config()
+
+        self._dialogue(
+            "Remplacer la saisie en cours ?",
+            [ft.Text("Vos dernières modifications n'ont pas encore été enregistrées :",
+                     size=TS_CORPS),
+             ft.Text(_resume_session({"config": en_cours}), size=TS_CORPS,
+                     weight=ft.FontWeight.W_600),
+             ft.Text("Pour les garder, générez le classeur ou cliquez sur « Enregistrer "
+                     "config » avant de charger une autre configuration.", size=TS_CORPS)],
+            [ft.TextButton("Annuler", style=STYLE_BTN,
+                           on_click=lambda e: self.page.pop_dialog()),
+             ft.FilledButton("Charger quand même", icon=ft.Icons.FOLDER_OPEN,
+                             style=STYLE_BTN, on_click=charger_quand_meme)],
+            icone=ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=C_PARTI))
+
+    async def _choisir_config(self):
         # Flet 0.80+ : pick_files est une coroutine qui renvoie la sélection,
         # au lieu de l'ancien callback on_result.
         fichiers = await self._fp.pick_files(
@@ -1101,6 +1301,7 @@ class AppLoyers:
             self._toast(f"Chargement impossible : {exc}", ok=False)
             return
         self._peupler_depuis(cfg)
+        self._marquer_propre()
         # « X.json » écrit à côté de « X.xlsx » (Enregistrer la config à côté) : ce
         # classeur devient le dernier connu du bailleur, proposé à la génération.
         voisin = p.with_suffix(".xlsx")
@@ -1153,12 +1354,13 @@ class AppLoyers:
         p = Path(chemin)
         if p.suffix.lower() != ".json":
             p = p.with_suffix(".json")
+        cfg = self._config()
         try:
-            p.write_text(json.dumps(self._config(), ensure_ascii=False, indent=2),
-                         encoding="utf-8")
+            p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as exc:  # noqa: BLE001
             self._toast(f"Enregistrement impossible : {exc}", ok=False)
             return
+        self._marquer_propre(cfg)
         self._toast(f"Configuration enregistrée : {p.name}")
 
     # --- génération du classeur -------------------------------------------
@@ -1306,13 +1508,15 @@ class AppLoyers:
         _enregistrer_reglages(self._reglages)
         lignes = _lignes_rapport(rapport, sortie)
         if self._enregistrer_aussi.value:
+            cfg = self._config()
             try:
                 sortie.with_suffix(".json").write_text(
-                    json.dumps(self._config(), ensure_ascii=False, indent=2),
-                    encoding="utf-8")
+                    json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
             except OSError as exc:
                 lignes.append(("alerte", "Configuration non enregistrée à côté du "
                                          f"classeur : {exc}"))
+            else:
+                self._marquer_propre(cfg)
         self._afficher_rapport(sortie, rapport, lignes)
 
     def _fin_generation(self):
