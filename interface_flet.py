@@ -646,7 +646,7 @@ class AppLoyers:
         return ft.Container(
             ft.Text(texte, size=TS_PETIT, weight=ft.FontWeight.W_600, color=couleur,
                     no_wrap=True, text_align=ft.TextAlign.CENTER),
-            width=84, alignment=ft.Alignment.CENTER,
+            width=76, alignment=ft.Alignment.CENTER,
             bgcolor=ft.Colors.with_opacity(0.15, couleur),
             padding=ft.Padding.symmetric(vertical=4, horizontal=6), border_radius=20)
 
@@ -687,16 +687,17 @@ class AppLoyers:
         return "—"
 
     def _colonnes(self) -> list[dict]:
-        """Colonnes actives selon les modules. `flex` = poids `expand` ; `tri` =
-        clé de tri (None => colonne non triable, ex. Actions)."""
+        """Colonnes actives selon les modules. `flex` = poids `expand` (ou
+        `largeur` fixe en px) ; `tri` = clé de tri (None => colonne non triable,
+        ex. Actions)."""
         cols = [
-            {"cle": "nom", "label": "Locataire", "flex": 24,
+            {"cle": "nom", "label": "Locataire", "flex": 28,
              "tri": lambda loc: self._nom_complet(loc).lower()},
             {"cle": "bien", "label": "Bien", "flex": 16,
              "tri": lambda loc: (loc.get("identifiant") or loc.get("type_bien") or "").lower()},
-            {"cle": "adresse", "label": "Adresse", "flex": 22,
+            {"cle": "adresse", "label": "Adresse", "flex": 16,
              "tri": lambda loc: (loc.get("adresse") or "").lower()},
-            {"cle": "loyer", "label": "Loyer", "flex": 14, "droite": True,
+            {"cle": "loyer", "label": "Loyer", "flex": 18, "droite": True,
              "tri": self._loyer_loc},
         ]
         if self.m_caf.value:
@@ -705,9 +706,11 @@ class AppLoyers:
         cols += [
             {"cle": "periode", "label": "Période", "flex": 20,
              "tri": lambda loc: loc.get("date_entree") or ""},
-            {"cle": "etat", "label": "État", "flex": 14,
+            {"cle": "etat", "label": "État", "largeur": 96,  # badge (76 px) + marges : largeur fixe
              "tri": lambda loc: 1 if _est_parti(loc) else 0},
-            {"cle": "actions", "label": "", "flex": 12, "droite": True, "tri": None},
+            # Largeur FIXE : deux IconButton (~40 px chacun) ne se compriment pas ;
+            # en flex, la colonne tombait sous leur largeur et coupait « Supprimer ».
+            {"cle": "actions", "label": "", "largeur": 104, "droite": True, "tri": None},
         ]
         return cols
 
@@ -729,6 +732,14 @@ class AppLoyers:
             self._tri_cle, self._tri_asc = cle, True
         self._rafraichir_table()
 
+    @staticmethod
+    def _dim_col(col: dict) -> dict:
+        """Dimension d'une colonne, identique en-tête et lignes : largeur fixe ou
+        part (`expand`) de la place restante."""
+        if "largeur" in col:
+            return {"width": col["largeur"]}
+        return {"expand": col["flex"]}
+
     def _entete_table(self) -> ft.Control:
         cells = []
         for col in self._cols_courantes:
@@ -745,7 +756,7 @@ class AppLoyers:
                 alignment=(ft.MainAxisAlignment.END if col.get("droite")
                            else ft.MainAxisAlignment.START),
                 vertical_alignment=ft.CrossAxisAlignment.CENTER)
-            cell = ft.Container(rang, expand=col["flex"],
+            cell = ft.Container(rang, **self._dim_col(col),
                                 padding=ft.Padding.symmetric(horizontal=10))
             if col.get("tri"):
                 cell.on_click = lambda e, c=col["cle"]: self._trier_par(c)
@@ -798,7 +809,7 @@ class AppLoyers:
                 tooltip=txt if cle == "adresse" and txt != "—" else None)
         aligne = None if isinstance(contenu, ft.Text) else (
             ft.Alignment.CENTER_RIGHT if droite else ft.Alignment.CENTER_LEFT)
-        return ft.Container(contenu, expand=col["flex"], alignment=aligne,
+        return ft.Container(contenu, **self._dim_col(col), alignment=aligne,
                             padding=ft.Padding.symmetric(horizontal=10))
 
     def _ligne(self, orig_idx: int, loc: dict) -> ft.Control:
