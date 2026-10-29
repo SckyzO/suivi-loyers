@@ -99,6 +99,11 @@ def main() -> int:
 
     # Guide redessiné : bandeau de titre + lien INSEE en pied (module IRL actif).
     assert wb["Guide"]["B1"].value == "Suivi des loyers", wb["Guide"]["B1"].value
+    textes_guide = " ".join(str(c.value) for row in wb["Guide"].iter_rows() for c in row
+                            if c.value)
+    # Les 4 documents imprimables sont cités (la mise en demeure était oubliée).
+    for doc in ("Quittance", "Avis d'échéance", "Lettre de relance", "Mise en demeure"):
+        assert doc in textes_guide, doc
     irl = wb["Révision IRL"]
     liens = [irl.cell(r, c).hyperlink.target for r in range(1, 5)
              for c in range(1, 4) if irl.cell(r, c).hyperlink]

@@ -1878,9 +1878,9 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
         etapes.append("Onglet « Tableau de bord » (2e onglet) : graphiques dû vs reçu et taux "
                       "de recouvrement, mis à jour automatiquement.")
     if cfg["modules"].get("documents"):
-        etapes.append("Documents à imprimer (Quittance, Avis d'échéance, Lettre de relance) : "
-                      "choisissez le locataire et la période dans les listes déroulantes ; le "
-                      "document se remplit seul.")
+        etapes.append("Documents à imprimer (Quittance, Avis d'échéance, Lettre de relance, "
+                      "Mise en demeure) : choisissez le locataire et la période dans les listes "
+                      "déroulantes ; le document se remplit seul.")
     if cfg["modules"].get("regularisation_charges") and _flags_charges(cfg)[0]:
         etapes.append("Onglet « Régularisation charges » : saisissez les charges réelles "
                       "annuelles (pré-remplies en mode charges comprises) ; le solde par "
@@ -1903,7 +1903,8 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
                  "Vert : une feuille de saisie par locataire (c'est là qu'on remplit chaque mois).")
     if cfg["modules"].get("documents"):
         r = pastille(r, "", CHARTE.onglet_document,
-                     "Orange : documents à imprimer (quittance, avis d'échéance, relance).")
+                     "Orange : documents à imprimer (quittance, avis d'échéance, relance, "
+                     "mise en demeure).")
     r += 1
 
     # --- Légende des statuts ---
