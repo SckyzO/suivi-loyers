@@ -4,6 +4,7 @@ Couvre : architecture (feuille par locataire + Données masquée + documents), m
 période d'activité (rotation), et préservation des saisies lors d'une régénération.
 """
 
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -215,6 +216,70 @@ def main() -> int:
         assert fb.read_bytes() == avant
         assert len(list(tmp.glob("bak.bak-*.xlsx"))) == nb_bak, "copie créée pour rien"
 
+    # Reprise depuis un AUTRE classeur (source=) : générer sous un nouveau nom sans repartir
+    # de zéro. Le classeur source n'est ni modifié ni copié.
+    fa = tmp / "ancien.xlsx"
+    loc_ana = {"nom": "Ana", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}
+    g.generer_workbook(g.valider_config({**bse, "locataires": [loc_ana]}), fa)
+    wba = load_workbook(fa)
+    sa = wba["M1 - Ana"]
+    re_, ea = ligne_entete(sa)
+    sa.cell(re_ + 1, ea["Part locataire reçue"]).value = 88   # janvier
+    sa.cell(re_ + 2, ea["Part locataire reçue"]).value = 99   # février
+    wba.save(fa)
+    avant_a = fa.read_bytes()
+    fn = tmp / "nouveau.xlsx"
+    rap = g.RapportGeneration()
+    cfg_n = g.valider_config({**bse, "locataires": [
+        loc_ana, {"nom": "Bob", "identifiant": "M2", "loyer": 50, "date_entree": "2025-01-01"}]})
+    g.generer_workbook(cfg_n, fn, source=fa, rapport=rap)
+    assert rap.source == fa and rap.mois_repris == 2 and not rap.ecartees, rap
+    assert rap.sauvegarde is None, rap.sauvegarde        # rien n'a été remplacé
+    sn = load_workbook(fn)["M1 - Ana"]
+    rn_, en_ = ligne_entete(sn)
+    assert [sn.cell(rn_ + i, en_["Part locataire reçue"]).value for i in (1, 2)] == [88, 99]
+    assert fa.read_bytes() == avant_a and not list(tmp.glob("ancien.bak-*")), \
+        "le classeur source ne doit pas être touché"
+    try:
+        g.generer_workbook(cfg_n, fn, source=tmp / "absent.xlsx")
+        raise AssertionError("source introuvable : erreur attendue (pas de classeur vide)")
+    except FileNotFoundError:
+        pass
+
+    # Rapport d'une régénération sur place : copie .bak + saisies écartées avec leur motif.
+    # Ana part fin janvier : février sort de sa période ; Bob supprimé n'avait rien saisi.
+    rap = g.RapportGeneration()
+    g.generer_workbook(g.valider_config({**bse, "locataires": [
+        {**loc_ana, "date_sortie": "2025-01-31"}]}), fn, rapport=rap)
+    assert rap.source == fn and rap.mois_repris == 1, rap
+    assert rap.sauvegarde and rap.sauvegarde.is_file() and ".bak-" in rap.sauvegarde.name
+    assert [(e.quoi, e.nombre) for e in rap.ecartees] == [("Ana", 1)], rap.ecartees
+    assert "période" in rap.ecartees[0].motif, rap.ecartees[0].motif
+    # Locataire supprimé : toutes ses saisies sont écartées, motif explicite.
+    rap = g.RapportGeneration()
+    g.generer_workbook(g.valider_config({**bse, "locataires": [
+        {"nom": "Zoe", "identifiant": "M9", "loyer": 70, "date_entree": "2025-01-01"}]}),
+        fn, source=fa, rapport=rap)
+    assert rap.mois_repris == 0 and [(e.quoi, e.nombre) for e in rap.ecartees] == [("Ana", 2)]
+    assert "renommé ou supprimé" in rap.ecartees[0].motif, rap.ecartees[0].motif
+    # Option CAF désactivée : la part CAF saisie n'a plus de colonne -> signalée.
+    fcaf = tmp / "caf.xlsx"
+    cfg_caf = {**bse, "modules": {**bse["modules"], "caf": True},
+               "locataires": [{**loc_ana, "part_caf": 30}]}
+    g.generer_workbook(g.valider_config(cfg_caf), fcaf)
+    wcf = load_workbook(fcaf)
+    scf = wcf["M1 - Ana"]
+    rcf, ecf = ligne_entete(scf)
+    scf.cell(rcf + 1, ecf["CAF reçue"]).value = 30
+    scf.cell(rcf + 1, ecf["Part locataire reçue"]).value = 70
+    wcf.save(fcaf)
+    rap = g.RapportGeneration()
+    g.generer_workbook(g.valider_config({**cfg_caf, "modules": bse["modules"]}), fcaf,
+                       rapport=rap)
+    assert rap.mois_repris == 1, rap                    # la part locataire est reprise
+    assert [(e.quoi, e.nombre) for e in rap.ecartees] == [("Ana", 1)], rap.ecartees
+    assert "CAF" in rap.ecartees[0].motif, rap.ecartees[0].motif
+
     # Prorata : entrée le 6 janvier (31 jours) -> facteur *26/31 dans le loyer dû.
     fp = tmp / "prorata.xlsx"
     g.generer_workbook(g.valider_config({**bse, "locataires": [
@@ -322,7 +387,9 @@ def main() -> int:
     reg.cell(2, ent["Charges réelles (€)"]).value = 612
     cle_reg = (reg.cell(2, ent["Locataire"]).value, reg.cell(2, ent["Année"]).value)
     wb.save(f1)
-    g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True)
+    rap5 = g.RapportGeneration()
+    g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True, rapport=rap5)
+    assert rap5.charges_reprises == 1 and not rap5.ecartees, rap5
     reg = load_workbook(f1)["Régularisation charges"]
     ent = {reg.cell(1, c).value: c for c in range(1, reg.max_column + 1)}
     val = None
@@ -338,7 +405,18 @@ def main() -> int:
     irl = wb["Révision IRL"]
     irl.cell(5, 3).value = 145.17                       # valeur IRL T1 année début (saisie)
     wb.save(f1)
-    g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True)
+    rap5b = g.RapportGeneration()
+    g.generer_workbook(g.valider_config(CFG_COMPLET), f1, preserver=True, rapport=rap5b)
+    assert rap5b.indices_repris == 1 and rap5b.charges_reprises == 1, rap5b
+    # Module IRL désactivé : les indices saisis n'ont plus d'onglet -> signalés, pas perdus
+    # en silence (essai sur une copie, f1 sert encore plus bas).
+    f1b = tmp / "sans_irl.xlsx"
+    shutil.copy(f1, f1b)
+    rap_off = g.RapportGeneration()
+    g.generer_workbook(g.valider_config({**CFG_COMPLET, "modules": {
+        **CFG_COMPLET["modules"], "irl": False}}), f1b, rapport=rap_off)
+    assert [(e.quoi, e.nombre) for e in rap_off.ecartees] == [("Indices IRL", 1)], \
+        rap_off.ecartees
     wb = load_workbook(f1)
     irl = wb["Révision IRL"]
     assert irl.cell(5, 3).value == 145.17, irl.cell(5, 3).value

@@ -33,7 +33,7 @@ import calendar
 import warnings
 import datetime as dt
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -2029,6 +2029,79 @@ def recolter_irl(wb) -> dict:
 # Orchestration
 # --------------------------------------------------------------------------- #
 
+@dataclass
+class Ecartee:
+    """Saisies lues dans le classeur repris qui n'ont pas pu être replacées."""
+    quoi: str      # identité du locataire, « Charges réelles » ou « Indices IRL »
+    motif: str     # pourquoi elles n'ont plus de place dans le nouveau classeur
+    nombre: int    # mois, années ou indices concernés
+
+
+@dataclass
+class RapportGeneration:
+    """Ce qu'une génération a repris, écarté et sauvegardé : de quoi informer
+    l'utilisateur, aucune saisie ne disparaît en silence."""
+    source: Path | None = None       # classeur dont les saisies ont été lues
+    sauvegarde: Path | None = None   # copie .bak du classeur remplacé
+    mois_repris: int = 0             # mois dont au moins une saisie a été replacée
+    charges_reprises: int = 0        # charges réelles (régularisation)
+    indices_repris: int = 0          # indices IRL
+    ecartees: list[Ecartee] = field(default_factory=list)
+
+
+def _bilan_reprise(wb: Workbook, cfg: dict, saisies: dict, saisies_reg: dict,
+                   saisies_irl: dict, rapport: RapportGeneration) -> None:
+    """Relit le nouveau classeur et le compare aux saisies lues : compte ce qui a été
+    replacé et motive chaque saisie écartée (vérification indépendante des builders)."""
+    actifs = {_identite(loc): set(_mois_actifs(loc, cfg["annee_debut"], cfg["annee_fin"]))
+              for loc in cfg["locataires"]}
+    nouv = recolter_saisies(wb)
+    ecarts: dict = {}   # (identité, motif) -> nombre de mois
+    for (nom, annee, mois), valeurs in saisies.items():
+        place = nouv.get((nom, annee, mois), {})
+        manquants = [k for k, v in valeurs.items() if place.get(k) != v]
+        if len(manquants) < len(valeurs):
+            rapport.mois_repris += 1
+        if not manquants:
+            continue
+        num_mois = MOIS.index(mois) + 1 if mois in MOIS else 0
+        if nom not in actifs:
+            motif = "locataire absent de la liste (renommé ou supprimé)"
+        elif (annee, num_mois) not in actifs[nom]:
+            motif = "mois hors de la période ou des dates du locataire"
+        elif all(k.startswith("caf_") for k in manquants):
+            motif = "montants CAF (option « Part CAF / APL » désactivée)"
+        else:
+            motif = "colonne absente du nouveau classeur"
+        ecarts[(nom, motif)] = ecarts.get((nom, motif), 0) + 1
+    rapport.ecartees += [Ecartee(nom, motif, n) for (nom, motif), n in ecarts.items()]
+
+    nouv_reg = recolter_regularisation(wb)
+    perdues = 0
+    for cle, v in saisies_reg.items():
+        if nouv_reg.get(cle) == v:
+            rapport.charges_reprises += 1
+        else:
+            perdues += 1
+    if perdues:
+        motif = ("locataire ou année absents du nouveau classeur"
+                 if "Régularisation charges" in wb.sheetnames
+                 else "onglet Régularisation désactivé")
+        rapport.ecartees.append(Ecartee("Charges réelles", motif, perdues))
+
+    nouv_irl = recolter_irl(wb).get("indices", {})
+    perdus = 0
+    for cle, v in saisies_irl.get("indices", {}).items():
+        if nouv_irl.get(cle) == v:
+            rapport.indices_repris += 1
+        else:
+            perdus += 1
+    if perdus:
+        motif = ("année hors de la période" if "Révision IRL" in wb.sheetnames
+                 else "onglet Révision IRL désactivé")
+        rapport.ecartees.append(Ecartee("Indices IRL", motif, perdus))
+
+
 def _verifier_remplacable(sortie: Path) -> None:
     """Échoue avant tout travail si le classeur existant ne peut pas être remplacé
     (ouvert dans Excel sous Windows, lecture seule) : rien n'est créé ni modifié."""
@@ -2043,11 +2116,23 @@ def _verifier_remplacable(sortie: Path) -> None:
 
 
 def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
-                     orphelins_out: list | None = None) -> Path:
+                     orphelins_out: list | None = None, source: Path | None = None,
+                     rapport: RapportGeneration | None = None) -> Path:
+    """Construit le classeur `sortie` en reprenant les saisies d'un classeur existant.
+
+    Les saisies sont lues dans `source` si fourni (générer sous un nouveau nom sans
+    repartir de zéro ; `source` n'est pas modifié), sinon dans `sortie` s'il existe.
+    `rapport`, si fourni, reçoit ce qui a été repris, écarté et sauvegardé.
+    """
     cfg = valider_config(cfg) if "annee_debut" not in cfg else cfg
     sortie = Path(sortie)
     if sortie.is_file():
         _verifier_remplacable(sortie)
+    lecture = Path(source) if source is not None else sortie
+    if preserver and source is not None and not lecture.is_file():
+        # Une source demandée mais absente donnerait un classeur vide : on refuse.
+        raise FileNotFoundError(f"Classeur à reprendre introuvable : {lecture}")
+    rapport = rapport if rapport is not None else RapportGeneration()
 
     # Identité graphique : résout la charte active pour toute la génération.
     global CHARTE
@@ -2055,24 +2140,23 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
 
     # Un seul chargement du classeur existant pour récolter toutes les saisies.
     saisies, saisies_reg, saisies_irl = {}, {}, {}
-    if preserver and sortie.is_file():
-        wbx = load_workbook(sortie, data_only=False)
+    if preserver and lecture.is_file():
+        wbx = load_workbook(lecture, data_only=False)
         saisies = recolter_saisies(wbx)
         saisies_reg = recolter_regularisation(wbx)
         saisies_irl = recolter_irl(wbx)
+        rapport.source = lecture
+    saisies_lues = saisies
 
     # Exemples : pré-remplissage de démonstration si aucune saisie réelle à préserver.
     if cfg.get("demo") and not saisies:
         saisies = _saisies_demo(cfg)
 
-    # Signaler les saisies orphelines (locataire renommé/supprimé) : non réinjectées.
+    # Saisies orphelines (locataire renommé/supprimé) : non réinjectées.
     identites = {_identite(loc) for loc in cfg["locataires"]}
-    orphelins = sorted({nom for (nom, _, _) in saisies if nom not in identites})
-    if orphelins:
-        print("Attention : saisies non réattribuées (locataire renommé ou supprimé) : "
-              + ", ".join(orphelins), file=sys.stderr)
-        if orphelins_out is not None:
-            orphelins_out.extend(orphelins)
+    orphelins = sorted({nom for (nom, _, _) in saisies_lues if nom not in identites})
+    if orphelins_out is not None:
+        orphelins_out.extend(orphelins)
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -2087,6 +2171,12 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     if cfg["modules"].get("documents"):
         construire_documents(wb, cfg, ref_loc)
     construire_guide(wb, cfg)
+
+    # Vérifie, par relecture du nouveau classeur, que chaque saisie lue a été replacée.
+    _bilan_reprise(wb, cfg, saisies_lues, saisies_reg, saisies_irl, rapport)
+    for e in rapport.ecartees:
+        print(f"Attention : saisies non reprises — {e.quoi} : {e.nombre} ({e.motif})",
+              file=sys.stderr)
 
     # Tableau de bord en 2e position, juste après le Guide (visible dès l'ouverture).
     if "Tableau de bord" in wb.sheetnames:
@@ -2122,8 +2212,10 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
     # Sans copie, on n'écrase pas : l'utilisatrice ne fait aucune sauvegarde elle-même.
     if sortie.is_file():
         horo = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        bak = sortie.with_name(f"{sortie.stem}.bak-{horo}.xlsx")
         try:
-            shutil.copy2(sortie, sortie.with_name(f"{sortie.stem}.bak-{horo}.xlsx"))
+            shutil.copy2(sortie, bak)
+            rapport.sauvegarde = bak
         except OSError as exc:
             raise OSError(f"Copie de sécurité de « {sortie.name} » impossible ({exc}) : "
                           "génération annulée, le classeur existant n'a pas été "
