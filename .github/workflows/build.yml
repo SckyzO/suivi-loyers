@@ -88,6 +88,24 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$PWD:/src" suivi-loyers-linux-build
 
+      # Non-régression du lancement réel : sous Xvfb, le binaire doit encore
+      # tourner au bout de 20 s (timeout -> 124). Attrape un client Flutter qui
+      # meurt au démarrage (ex. bibliothèques PyInstaller héritées -> EGL KO).
+      - name: Tester le lancement (Xvfb)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            libgtk-3-0t64 libsecret-1-0 libgles2 libgl1-mesa-dri xvfb
+          set +e
+          HOME="$RUNNER_TEMP" xvfb-run -a timeout 20 dist/linux/SuiviLoyers > lancement.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 124 ]; then
+            cat lancement.log
+            echo "::error::Le binaire s'est arrêté (code $rc) au lieu de tourner 20 s."
+            exit 1
+          fi
+
       # tar.gz plutôt que zip : conserve le bit exécutable du binaire.
       - name: Empaqueter l'archive
         run: |

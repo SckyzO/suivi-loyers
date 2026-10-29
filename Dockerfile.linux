@@ -14,14 +14,12 @@ RUN FLET_VER=$(grep -E '^flet==' /tmp/requirements-flet.txt | cut -d= -f3) \
     && pip install --no-cache-dir -r /tmp/requirements-flet.txt pyinstaller \
         "flet-desktop==${FLET_VER}" "flet-cli==${FLET_VER}"
 
-# flet pack embarque l'archive du client Flet sous le nom de la distro du BUILD
-# (debian12), mais au lancement flet_desktop recalcule ce nom d'après la glibc de
-# l'HÔTE (ex. ubuntu24.04 sur une distro récente) : l'archive embarquée n'est pas
-# trouvée et il tente un téléchargement GitHub. Le runtime hook fige la distro du
-# build (setdefault : FLET_LINUX_DISTRO reste surchargeable).
+# Runtime hook (packaging/pyi_rth_linux.py) : fige la distro du client Flet
+# embarqué et rend aux sous-processus le LD_LIBRARY_PATH de l'hôte (détails dans
+# le fichier). La distro du build y est injectée depuis FLET_LINUX_DISTRO.
 ENV FLET_LINUX_DISTRO=debian12
-RUN mkdir -p /opt/hooks && printf 'import os\nos.environ.setdefault("FLET_LINUX_DISTRO", "%s")\n' \
-        "$FLET_LINUX_DISTRO" > /opt/hooks/flet_linux_distro.py
+COPY packaging/pyi_rth_linux.py /opt/hooks/
+RUN sed -i "s/@FLET_LINUX_DISTRO@/${FLET_LINUX_DISTRO}/" /opt/hooks/pyi_rth_linux.py
 
 WORKDIR /src
 # Mêmes options que build-flet.bat / .github/workflows/build.yml.
@@ -32,6 +30,6 @@ ENTRYPOINT ["flet", "pack", "interface_flet.py", "--yes", \
             "--hidden-import", "openpyxl", \
             "--distpath", "dist/linux", \
             "--pyinstaller-build-args=--log-level=WARN", \
-            "--pyinstaller-build-args=--runtime-hook=/opt/hooks/flet_linux_distro.py", \
+            "--pyinstaller-build-args=--runtime-hook=/opt/hooks/pyi_rth_linux.py", \
             "--pyinstaller-build-args=--workpath=/tmp/build", \
             "--pyinstaller-build-args=--specpath=/tmp"]

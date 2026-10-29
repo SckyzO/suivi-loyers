@@ -10,10 +10,13 @@ interface graphique pour un usage non technique sous Windows.
 - **Mainteneur** : sous WSL, **tout en Docker** (pas de venv local). Le `.exe` se construit
   côté Windows avec `build-flet.bat` (PyInstaller n'est pas multi-plateforme). Le binaire
   **Linux** se construit dans Docker : `make linux` (`Dockerfile.linux`, base bookworm = glibc
-  2.36 minimale). Un runtime hook fige `FLET_LINUX_DISTRO` à la distro du build : sans lui,
-  flet-desktop 0.85 cherche l'archive client embarquée sous le nom de la distro de l'**hôte**
-  et tente un téléchargement GitHub. CI : `build.yml` (jobs `windows` + `linux`, puis
-  `release` unique sur tag `v*`).
+  2.36 minimale). Runtime hook `packaging/pyi_rth_linux.py` : (1) fige `FLET_LINUX_DISTRO` à
+  la distro du build (sinon flet-desktop cherche l'archive client sous le nom de la distro de
+  l'**hôte** et tente un téléchargement GitHub) ; (2) rend aux sous-processus le
+  `LD_LIBRARY_PATH` d'origine (sinon le client Flutter hérite des libs PyInstaller, Mesa de
+  l'hôte échoue : « No provider of eglGetPlatformDisplayEXT », le client meurt). CI :
+  `build.yml` (jobs `windows` + `linux` avec test de lancement sous Xvfb, puis `release`
+  unique sur tag `v*`).
 - **Langue** : interface, classeur généré et documentation en **français** (audience française).
 
 ## Architecture
