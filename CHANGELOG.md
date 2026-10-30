@@ -21,6 +21,9 @@ Les changements notables de chaque version. Le format suit
 - Dans une fenêtre étroite, la liste des locataires masque les colonnes les moins utiles
   (Adresse, puis CAF, Période et Bien) au lieu de toutes les tronquer : le nom, le loyer et
   l'état restent lisibles. À la taille de fenêtre par défaut, rien ne change.
+- L'interrupteur des partis, la recherche et le bouton « Ajouter » sont sur la ligne du titre
+  de la liste, qui gagne une ligne de hauteur. L'interrupteur s'appelle maintenant « Afficher
+  les partis ». Dans une fenêtre étroite, ces commandes passent sous le titre.
 
 ## [1.2.1] - 2026-10-29
 

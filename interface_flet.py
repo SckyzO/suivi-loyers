@@ -214,6 +214,20 @@ def _colonnes_pour_largeur(cols: list[dict], largeur: float | None) -> list[dict
     return gardees
 
 
+# Barre au-dessus de la liste : « Afficher les partis », la recherche et « Ajouter » sur la
+# ligne du titre. Sous LARGEUR_BARRE_UNE_LIGNE px de tableau, ils passent sous le titre au
+# lieu d'être coupés. Calibrés par rendu : une ligne à la largeur par défaut de la fenêtre
+# (1180 px, tableau ≈ 730 px), deux à la largeur minimale (1000 px, ≈ 550 px).
+LARGEUR_RECHERCHE = 180
+LARGEUR_BARRE_UNE_LIGNE = 680
+
+
+def _barre_sur_une_ligne(largeur: float | None) -> bool:
+    """Titre, compteur et commandes de la liste tiennent-ils sur une ligne dans `largeur`
+    px ? Largeur inconnue (avant le premier rendu) : oui, comme à la taille par défaut."""
+    return not largeur or largeur >= LARGEUR_BARRE_UNE_LIGNE
+
+
 def _libelle_compteur(n_total: int, n_affiches: int, n_partis_masques: int) -> str:
     base = (f"{n_affiches} / {n_total}" if n_affiches != n_total
             else f"{n_total} locataire{'s' if n_total > 1 else ''}")
@@ -764,7 +778,7 @@ class AppLoyers:
         self._largeur_table = None    # px, connue après le 1er rendu (colonnes affichées)
         self._reglages = _charger_reglages()
         self._maj_active = bool(self._reglages.get("verifier_maj", True))
-        # Toggle « Afficher les locataires partis » : affichés par défaut (non-régression).
+        # Toggle « Afficher les partis » : affichés par défaut (non-régression).
         self._afficher_partis = bool(self._reglages.get("afficher_partis", True))
         # Sauvegarde automatique de la saisie en cours (session.json).
         self._verrou_session = threading.Lock()
@@ -1236,11 +1250,16 @@ class AppLoyers:
 
     def _on_taille_table(self, e):
         """Largeur du tableau changée (fenêtre redimensionnée) : ne redessine que si
-        l'ensemble des colonnes affichées change."""
+        l'ensemble des colonnes affichées ou la disposition de la barre change."""
+        barre = _barre_sur_une_ligne(e.width) != _barre_sur_une_ligne(self._largeur_table)
         self._largeur_table = e.width
+        if barre:
+            self._disposer_barre()
         avant = [c["cle"] for c in self._cols_courantes]
         if [c["cle"] for c in _colonnes_pour_largeur(self._colonnes(), e.width)] != avant:
             self._rafraichir_table()
+        elif barre:
+            self.page.update()
 
     def _rafraichir_table(self):
         self._cols_courantes = _colonnes_pour_largeur(self._colonnes(), self._largeur_table)
@@ -1865,14 +1884,17 @@ class AppLoyers:
                 ft.Text("Locataires partis masqués", size=16,
                         weight=ft.FontWeight.W_600),
                 ft.Text("Les locataires correspondants sont tous partis. Activez "
-                        "« Afficher les locataires partis » pour les voir.",
+                        "« Afficher les partis » pour les voir.",
                         color=C_MUTED, text_align=ft.TextAlign.CENTER),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6,
                 tight=True),
             alignment=ft.Alignment.CENTER, expand=True)
 
     def _zone_principale(self) -> ft.Control:
-        self._compteur = ft.Text("0 locataire", size=TS_LABEL, color=C_MUTED)
+        # Le compteur occupe la place libre de la barre (points de suspension s'il en
+        # manque) : les commandes ne bougent pas quand son texte change.
+        self._compteur = ft.Text("0 locataire", size=TS_LABEL, color=C_MUTED, expand=True,
+                                 max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
         self._zone_loc = ft.Container(expand=True, on_size_change=self._on_taille_table)
 
         cadre = ft.Container(
@@ -1881,34 +1903,46 @@ class AppLoyers:
             padding=0, clip_behavior=ft.ClipBehavior.HARD_EDGE)
 
         self._champ_recherche = ft.TextField(
-            hint_text="Rechercher…", width=260, filled=True, bgcolor=C_FIELD,
+            hint_text="Rechercher…", filled=True, bgcolor=C_FIELD,
             border=BORDURE_CHAMP, dense=True,
             prefix_icon=ft.Icons.SEARCH, on_change=self._on_recherche,
             text_style=ft.TextStyle(size=14),
             content_padding=ft.Padding.symmetric(vertical=8, horizontal=14))
 
         self._switch_partis = ft.Switch(
-            label="Afficher les locataires partis", value=self._afficher_partis,
+            label="Afficher les partis", value=self._afficher_partis,
             on_change=self._on_toggle_partis,
             tooltip="Affichage seulement : le classeur garde tous les locataires.")
 
-        barre = ft.Row([
-            ft.Row([ft.Text("Locataires", size=TS_TITRE, weight=ft.FontWeight.W_700),
-                    self._compteur], spacing=12,
-                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.FilledButton("Ajouter", icon=ft.Icons.ADD,
-                            on_click=self._ajouter_loc, style=STYLE_BTN),
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER)
-
-        # Ligne de filtres (affichage seulement) séparée des actions : tient dans la
-        # largeur minimale de la fenêtre.
-        filtres = ft.Row([self._champ_recherche, self._switch_partis], spacing=16,
-                         vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        self._btn_ajouter = ft.FilledButton("Ajouter", icon=ft.Icons.ADD,
+                                            on_click=self._ajouter_loc, style=STYLE_BTN)
+        self._barre = ft.Container()
+        self._disposer_barre()
 
         return ft.Container(
-            ft.Column([barre, filtres, cadre], spacing=14, expand=True),
+            ft.Column([self._barre, cadre], spacing=14, expand=True),
             expand=True, padding=ft.Padding.symmetric(vertical=18, horizontal=24))
+
+    def _disposer_barre(self):
+        """Barre de la liste sur une ligne, ou commandes sous le titre si le tableau est
+        trop étroit (cf. _barre_sur_une_ligne). Les mêmes contrôles changent de ligne : la
+        recherche en cours et l'interrupteur gardent leur état."""
+        titre = ft.Text("Locataires", size=TS_TITRE, weight=ft.FontWeight.W_700)
+        commandes = [self._switch_partis, self._champ_recherche, self._btn_ajouter]
+        centre = ft.CrossAxisAlignment.CENTER
+        if _barre_sur_une_ligne(self._largeur_table):
+            self._champ_recherche.width = LARGEUR_RECHERCHE
+            self._champ_recherche.expand = None
+            self._barre.content = ft.Row([titre, self._compteur, *commandes], spacing=12,
+                                         vertical_alignment=centre)
+        else:
+            # Commandes sous le titre : la recherche prend la largeur restante.
+            self._champ_recherche.width = None
+            self._champ_recherche.expand = True
+            self._barre.content = ft.Column([
+                ft.Row([titre, self._compteur], spacing=12, vertical_alignment=centre),
+                ft.Row(commandes, spacing=12, vertical_alignment=centre),
+            ], spacing=14)
 
     def _pied(self) -> ft.Control:
         self._enregistrer_aussi = ft.Switch(label="Enregistrer la config à côté",

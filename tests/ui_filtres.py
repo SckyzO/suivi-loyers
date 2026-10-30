@@ -1,9 +1,9 @@
 """Test du filtrage de la table Locataires de l'interface (sans affichage).
 
 Couvre les fonctions pures de `interface_flet` : recherche texte, masquage des
-locataires partis (toggle « Afficher les locataires partis »), libellé du compteur
-et colonnes affichées selon la largeur du tableau. Importer `interface_flet` demande
-Flet, mais aucune fenêtre n'est ouverte.
+locataires partis (toggle « Afficher les partis »), libellé du compteur, colonnes
+affichées et disposition de la barre selon la largeur du tableau. Importer
+`interface_flet` demande Flet, mais aucune fenêtre n'est ouverte.
 """
 
 import sys
@@ -79,6 +79,12 @@ def main() -> int:
         _nom_complet=lambda loc: ""))
     assert [c["cle"] for c in ui._colonnes_pour_largeur(sans_caf, 730)] == \
         [c for c in toutes if c != "caf"]
+
+    # Barre de la liste (« Afficher les partis », recherche, « Ajouter ») : sur la ligne du
+    # titre à la largeur par défaut, sous le titre en fenêtre minimale plutôt que coupée.
+    assert ui._barre_sur_une_ligne(None)         # avant le premier rendu
+    assert ui._barre_sur_une_ligne(730)
+    assert not ui._barre_sur_une_ligne(550)
 
     print("UI FILTRES OK")
     return 0

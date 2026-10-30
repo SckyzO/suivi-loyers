@@ -95,16 +95,17 @@ pour l'enregistrer ailleurs.
 ### La liste des locataires
 
 La liste se trie en cliquant sur l'en-tête d'une colonne, et se filtre avec le champ
-**Rechercher** (nom, prénom, bien ou adresse). L'interrupteur **Afficher les locataires
-partis** masque les anciens locataires de la liste. Il ne touche qu'à l'affichage : le
-classeur les garde tous, avec leur historique.
+**Rechercher** (nom, prénom, bien ou adresse). L'interrupteur **Afficher les partis**
+masque les anciens locataires de la liste. Il ne touche qu'à l'affichage : le classeur les
+garde tous, avec leur historique.
 
 Supprimer un locataire demande une confirmation : ses saisies ne seraient plus reportées
 dans le classeur. Pour un locataire qui part, indiquez plutôt une date de sortie.
 
 Dans une fenêtre étroite, la liste masque les colonnes les moins utiles (Adresse, puis CAF,
-Période et Bien) pour garder le nom, le loyer et l'état lisibles. Agrandissez la fenêtre pour
-les retrouver.
+Période et Bien) pour garder le nom, le loyer et l'état lisibles, et la recherche passe sous
+le titre avec l'interrupteur et le bouton **Ajouter**. Agrandissez la fenêtre pour retrouver
+les colonnes.
 
 ### Changer de locataire
 

@@ -52,13 +52,16 @@ porter une couleur explicite (`ft.Colors.ON_SURFACE`) sinon le texte reste blanc
 Réglages persistés par `_charger_reglages`/`_enregistrer_reglages` (→ `%APPDATA%/SuiviLoyers/
 settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
 (thread, API GitHub `releases/latest`, silencieuse hors-ligne, notif SnackBar + lien). La clé
-`afficher_partis` (défaut `true`) mémorise le toggle « Afficher les locataires partis » de la
+`afficher_partis` (défaut `true`) mémorise le toggle « Afficher les partis » de la
 table : **filtre d'affichage seulement**, le classeur garde tous les locataires. Le filtrage
 vit dans des fonctions pures de module (`_filtrer_locataires`, `_partis_masques`,
 `_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`, comme le choix des
 colonnes selon la largeur du tableau (`_colonnes_pour_largeur` : chaque colonne a une largeur
 lisible `min` et un ordre de retrait `masquable` ; calibrés pour que tout tienne à la largeur
-par défaut, 1180 px). La clé `classeurs`
+par défaut, 1180 px) et la disposition de la barre au-dessus (`_barre_sur_une_ligne` : toggle,
+recherche et « Ajouter » sur la ligne du titre, ou dessous en fenêtre étroite ; le compteur
+prend la place libre pour que les commandes ne bougent pas quand son texte change ;
+`_disposer_barre` déplace les mêmes contrôles, ce que Flet 1.0 gère). La clé `classeurs`
 (slug du bailleur → chemin) mémorise le **dernier classeur généré**, proposé d'office à la
 génération ; si le fichier choisi ne porte pas les saisies attendues (neuf, vide, autre
 classeur), l'interface demande d'où les reprendre (`_cas_reprise`) puis affiche un compte
