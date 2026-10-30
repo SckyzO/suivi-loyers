@@ -59,7 +59,8 @@ vit dans des fonctions pures de module (`_filtrer_locataires`, `_partis_masques`
 `_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`, comme le choix des
 colonnes selon la largeur du tableau (`_colonnes_pour_largeur` : chaque colonne a une largeur
 lisible `min` et un ordre de retrait `masquable` ; calibrés pour que tout tienne à la largeur
-par défaut, 1180 px) et la disposition de la barre au-dessus (`_barre_sur_une_ligne` : toggle,
+par défaut, 1180 px ; les cellules texte coupées, nom, bien, adresse et période, portent leur
+valeur entière en `tooltip`) et la disposition de la barre au-dessus (`_barre_sur_une_ligne` : toggle,
 recherche et « Ajouter » sur la ligne du titre, ou dessous en fenêtre étroite ; le compteur
 prend la place libre pour que les commandes ne bougent pas quand son texte change ;
 `_disposer_barre` déplace les mêmes contrôles, ce que Flet 1.0 gère). La clé `classeurs`

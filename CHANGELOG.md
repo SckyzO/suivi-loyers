@@ -17,6 +17,8 @@ Les changements notables de chaque version. Le format suit
   confirmation. Une saisie écartée est mise de côté, jamais effacée.
 - Les Réglages listent les saisies mises de côté (non reprises au démarrage, ou remplacées
   par un chargement), de la plus récente à la plus ancienne, avec un bouton « Reprendre ».
+- Dans la liste des locataires, un nom, un bien ou une période coupés s'affichent en entier
+  au survol de la souris, comme l'adresse.
 
 ### Modifié
 

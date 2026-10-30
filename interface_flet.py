@@ -1273,7 +1273,8 @@ class AppLoyers:
                     radius=15, bgcolor=ft.Colors.PRIMARY_CONTAINER,
                     color=ft.Colors.ON_PRIMARY_CONTAINER),
                 ft.Text(self._nom_complet(loc) or "—", weight=ft.FontWeight.W_600,
-                        no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, expand=True),
+                        no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, expand=True,
+                        tooltip=self._nom_complet(loc) or None),
             ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         elif cle == "etat":
             contenu = (self._badge("Parti", C_PARTI) if _est_parti(loc)
@@ -1298,12 +1299,13 @@ class AppLoyers:
                 txt, mute = (self._eur(v) if v else "—"), True
             else:  # periode
                 txt, mute = self._periode_txt(loc), True
+            # Bulle : la valeur entière des colonnes que la largeur coupe (« 8 aven… »).
             contenu = ft.Text(
                 txt, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS,
                 color=C_MUTED if mute else None,
                 weight=None if mute else ft.FontWeight.W_600,
                 text_align=ft.TextAlign.RIGHT if droite else ft.TextAlign.LEFT,
-                tooltip=txt if cle == "adresse" and txt != "—" else None)
+                tooltip=txt if cle in ("bien", "adresse", "periode") and txt != "—" else None)
         aligne = None if isinstance(contenu, ft.Text) else (
             ft.Alignment.CENTER_RIGHT if droite else ft.Alignment.CENTER_LEFT)
         return ft.Container(contenu, **self._dim_col(col), alignment=aligne,

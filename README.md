@@ -107,10 +107,11 @@ garde tous, avec leur historique.
 Supprimer un locataire demande une confirmation : ses saisies ne seraient plus reportées
 dans le classeur. Pour un locataire qui part, indiquez plutôt une date de sortie.
 
-Dans une fenêtre étroite, la liste masque les colonnes les moins utiles (Adresse, puis CAF,
-Période et Bien) pour garder le nom, le loyer et l'état lisibles, et la recherche passe sous
-le titre avec l'interrupteur et le bouton **Ajouter**. Agrandissez la fenêtre pour retrouver
-les colonnes.
+Un nom, un bien, une adresse ou une période trop longs pour leur colonne s'affichent en
+entier au survol de la souris. Dans une fenêtre étroite, la liste masque les colonnes les
+moins utiles (Adresse, puis CAF, Période et Bien) pour garder le nom, le loyer et l'état
+lisibles, et la recherche passe sous le titre avec l'interrupteur et le bouton **Ajouter**.
+Agrandissez la fenêtre pour retrouver les colonnes.
 
 ### Changer de locataire
 

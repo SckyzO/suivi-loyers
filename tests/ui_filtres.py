@@ -80,6 +80,25 @@ def main() -> int:
     assert [c["cle"] for c in ui._colonnes_pour_largeur(sans_caf, 730)] == \
         [c for c in toutes if c != "caf"]
 
+    # Valeur entière en bulle au survol pour les colonnes que la largeur coupe (« Martin
+    # Ali… » à la taille par défaut) ; rien à montrer pour une valeur absente (« — »).
+    faux_cell = SimpleNamespace(_nom_complet=ui._nom_complet, _dim_col=ui.AppLoyers._dim_col,
+                                _mois_an=ui.AppLoyers._mois_an)
+    faux_cell._periode_txt = lambda loc: ui.AppLoyers._periode_txt(faux_cell, loc)
+
+    def bulle(cle, loc):
+        cellule = ui.AppLoyers._cellule(faux_cell, next(c for c in cols if c["cle"] == cle),
+                                        loc, 0)
+        texte = cellule.content.controls[-1] if cle == "nom" else cellule.content
+        return texte.tooltip
+    sophie = LOCS[1]
+    assert [bulle(c, sophie) for c in ("nom", "bien", "adresse", "periode")] == \
+        ["Bernard Sophie", "M2", "Boulogne", "06/2023 → 12/2024"], \
+        [bulle(c, sophie) for c in ("nom", "bien", "adresse", "periode")]
+    inconnu = {"nom": "", "prenom": ""}
+    assert [bulle(c, inconnu) for c in ("nom", "bien", "adresse", "periode")] == \
+        [None] * 4
+
     # Barre de la liste (« Afficher les partis », recherche, « Ajouter ») : sur la ligne du
     # titre à la largeur par défaut, sous le titre en fenêtre minimale plutôt que coupée.
     assert ui._barre_sur_une_ligne(None)         # avant le premier rendu
