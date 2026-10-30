@@ -1,11 +1,13 @@
 """Test du filtrage de la table Locataires de l'interface (sans affichage).
 
 Couvre les fonctions pures de `interface_flet` : recherche texte, masquage des
-locataires partis (toggle « Afficher les locataires partis ») et libellé du
-compteur. Importer `interface_flet` demande Flet, mais aucune fenêtre n'est ouverte.
+locataires partis (toggle « Afficher les locataires partis »), libellé du compteur
+et colonnes affichées selon la largeur du tableau. Importer `interface_flet` demande
+Flet, mais aucune fenêtre n'est ouverte.
 """
 
 import sys
+from types import SimpleNamespace
 
 import interface_flet as ui
 
@@ -51,6 +53,32 @@ def main() -> int:
     assert ui._libelle_compteur(3, 1, 0) == "1 / 3"
     assert ui._libelle_compteur(3, 2, 1) == "2 / 3 · 1 parti masqué"
     assert ui._libelle_compteur(5, 2, 3) == "2 / 5 · 3 partis masqués"
+
+    # Colonnes selon la largeur du tableau : en fenêtre étroite, les moins utiles sont
+    # retirées (Adresse, CAF, Période, Bien) au lieu de tout tronquer. Définitions réelles
+    # de la classe (les lambdas de tri ne sont pas appelées ici).
+    faux = SimpleNamespace(m_caf=SimpleNamespace(value=True),
+                           _loyer_loc=lambda loc: 0, _nom_complet=lambda loc: "")
+    cols = ui.AppLoyers._colonnes(faux)
+
+    def cles(largeur):
+        return [c["cle"] for c in ui._colonnes_pour_largeur(cols, largeur)]
+    toutes = ["nom", "bien", "adresse", "loyer", "caf", "periode", "etat", "actions"]
+    assert cles(None) == toutes                  # avant le premier rendu : tout
+    # Fenêtre par défaut (1180 px) : tableau ≈ 1180 - 400 (volet) - 48 (marges) - 2 = 730
+    # px -> rien ne change.
+    assert cles(730) == toutes, cles(730)
+    assert cles(650) == ["nom", "bien", "loyer", "caf", "periode", "etat", "actions"]
+    # Fenêtre minimale (1000 px) : tableau ≈ 550 px -> l'essentiel, lisible.
+    assert cles(550) == ["nom", "bien", "loyer", "etat", "actions"], cles(550)
+    # Jamais moins que nom, loyer, état et actions.
+    assert cles(100) == ["nom", "loyer", "etat", "actions"]
+    # Sans module CAF, la colonne n'existe pas : rien d'autre ne casse.
+    sans_caf = ui.AppLoyers._colonnes(SimpleNamespace(
+        m_caf=SimpleNamespace(value=False), _loyer_loc=lambda loc: 0,
+        _nom_complet=lambda loc: ""))
+    assert [c["cle"] for c in ui._colonnes_pour_largeur(sans_caf, 730)] == \
+        [c for c in toutes if c != "caf"]
 
     print("UI FILTRES OK")
     return 0

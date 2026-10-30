@@ -199,6 +199,21 @@ def _partis_masques(locataires: list[dict], recherche: str, afficher_partis: boo
     return sum(_est_parti(loc) for _, loc in _resultats_recherche(locataires, recherche))
 
 
+def _colonnes_pour_largeur(cols: list[dict], largeur: float | None) -> list[dict]:
+    """Colonnes du tableau qui tiennent dans `largeur` px. Plutôt que de tout tronquer en
+    fenêtre étroite, retire d'abord les moins utiles (`masquable` croissant : Adresse,
+    CAF, Période, Bien) ; chaque colonne compte sa largeur fixe ou sa largeur lisible
+    `min`. Largeur inconnue (avant le premier rendu) : toutes les colonnes."""
+    if not largeur:
+        return cols
+    gardees = list(cols)
+    for col in sorted((c for c in cols if c.get("masquable")), key=lambda c: c["masquable"]):
+        if sum(c.get("largeur") or c.get("min", 0) for c in gardees) <= largeur:
+            break
+        gardees.remove(col)
+    return gardees
+
+
 def _libelle_compteur(n_total: int, n_affiches: int, n_partis_masques: int) -> str:
     base = (f"{n_affiches} / {n_total}" if n_affiches != n_total
             else f"{n_total} locataire{'s' if n_total > 1 else ''}")
@@ -746,6 +761,7 @@ class AppLoyers:
         self._recherche = ""          # filtre texte de la table
         self._tri_cle = "nom"         # colonne de tri active
         self._tri_asc = True          # sens du tri
+        self._largeur_table = None    # px, connue après le 1er rendu (colonnes affichées)
         self._reglages = _charger_reglages()
         self._maj_active = bool(self._reglages.get("verifier_maj", True))
         # Toggle « Afficher les locataires partis » : affichés par défaut (non-régression).
@@ -1066,22 +1082,25 @@ class AppLoyers:
     def _colonnes(self) -> list[dict]:
         """Colonnes actives selon les modules. `flex` = poids `expand` (ou
         `largeur` fixe en px) ; `tri` = clé de tri (None => colonne non triable,
-        ex. Actions)."""
+        ex. Actions). `min` = largeur lisible en px et `masquable` = ordre de
+        retrait en fenêtre étroite (cf. _colonnes_pour_largeur) : calibrés pour que
+        tout tienne à la largeur par défaut (tableau ≈ 730 px)."""
         cols = [
-            {"cle": "nom", "label": "Locataire", "flex": 28,
+            {"cle": "nom", "label": "Locataire", "flex": 28, "min": 140,
              "tri": lambda loc: self._nom_complet(loc).lower()},
-            {"cle": "bien", "label": "Bien", "flex": 16,
+            {"cle": "bien", "label": "Bien", "flex": 16, "min": 60, "masquable": 4,
              "tri": lambda loc: (loc.get("identifiant") or loc.get("type_bien") or "").lower()},
-            {"cle": "adresse", "label": "Adresse", "flex": 16,
+            {"cle": "adresse", "label": "Adresse", "flex": 16, "min": 80, "masquable": 1,
              "tri": lambda loc: (loc.get("adresse") or "").lower()},
-            {"cle": "loyer", "label": "Loyer", "flex": 18, "droite": True,
+            {"cle": "loyer", "label": "Loyer", "flex": 18, "min": 80, "droite": True,
              "tri": self._loyer_loc},
         ]
         if self.m_caf.value:
-            cols.append({"cle": "caf", "label": "CAF", "flex": 12, "droite": True,
+            cols.append({"cle": "caf", "label": "CAF", "flex": 12, "min": 55,
+                         "masquable": 2, "droite": True,
                          "tri": lambda loc: loc.get("part_caf", 0) or 0})
         cols += [
-            {"cle": "periode", "label": "Période", "flex": 20,
+            {"cle": "periode", "label": "Période", "flex": 20, "min": 100, "masquable": 3,
              "tri": lambda loc: loc.get("date_entree") or ""},
             {"cle": "etat", "label": "État", "largeur": 96,  # badge (76 px) + marges : largeur fixe
              "tri": lambda loc: 1 if _est_parti(loc) else 0},
@@ -1097,7 +1116,9 @@ class AppLoyers:
         supprimer corrects)."""
         items = _filtrer_locataires(self.locataires, self._recherche,
                                     self._afficher_partis)
-        col = next((c for c in self._cols_courantes if c["cle"] == self._tri_cle), None)
+        # Toutes les colonnes : le tri reste appliqué si la sienne est masquée (fenêtre
+        # étroite).
+        col = next((c for c in self._colonnes() if c["cle"] == self._tri_cle), None)
         if col and col.get("tri"):
             items.sort(key=lambda it: col["tri"](it[1]), reverse=not self._tri_asc)
         return items
@@ -1213,8 +1234,16 @@ class AppLoyers:
         _enregistrer_reglages(self._reglages)
         self._rafraichir_table()
 
+    def _on_taille_table(self, e):
+        """Largeur du tableau changée (fenêtre redimensionnée) : ne redessine que si
+        l'ensemble des colonnes affichées change."""
+        self._largeur_table = e.width
+        avant = [c["cle"] for c in self._cols_courantes]
+        if [c["cle"] for c in _colonnes_pour_largeur(self._colonnes(), e.width)] != avant:
+            self._rafraichir_table()
+
     def _rafraichir_table(self):
-        self._cols_courantes = self._colonnes()
+        self._cols_courantes = _colonnes_pour_largeur(self._colonnes(), self._largeur_table)
         n = len(self.locataires)
         if n:
             affiches = self._locataires_affiches()
@@ -1844,7 +1873,7 @@ class AppLoyers:
 
     def _zone_principale(self) -> ft.Control:
         self._compteur = ft.Text("0 locataire", size=TS_LABEL, color=C_MUTED)
-        self._zone_loc = ft.Container(expand=True)
+        self._zone_loc = ft.Container(expand=True, on_size_change=self._on_taille_table)
 
         cadre = ft.Container(
             self._zone_loc, expand=True, bgcolor=ft.Colors.SURFACE,
