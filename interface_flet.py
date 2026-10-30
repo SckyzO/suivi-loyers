@@ -404,6 +404,20 @@ def _archiver_session() -> Path | None:
     return cible
 
 
+def _lire_config(brut) -> tuple[dict, list[str]]:
+    """Config d'un fichier ouvert par « Charger config » (cf. moteur.migrer_config).
+    Accepte aussi une saisie mise de côté ({"config": …}). Refuse un fichier qui n'est
+    pas une configuration : il chargeait un formulaire vide, sans avertissement."""
+    if isinstance(brut, dict) and isinstance(brut.get("config"), dict) \
+            and "bailleur" not in brut:
+        brut = brut["config"]
+    cfg, avertis = moteur.migrer_config(brut) if isinstance(brut, dict) else ({}, [])
+    if not _a_du_contenu(cfg):
+        raise ValueError("ce fichier ne contient pas de configuration (ni bailleur ni "
+                         "locataire)")
+    return cfg, avertis
+
+
 def _session_a_reprendre(session: dict) -> dict | None:
     """Config d'une session précédente à proposer à la reprise : seulement si elle portait
     des modifications non enregistrées (sinon elles sont déjà dans un .json)."""
@@ -1395,7 +1409,7 @@ class AppLoyers:
                 brut = yaml.safe_load(p.read_text(encoding="utf-8"))
             else:
                 brut = json.loads(p.read_text(encoding="utf-8"))
-            cfg, avertis = moteur.migrer_config(brut)
+            cfg, avertis = _lire_config(brut)
         except Exception as exc:  # noqa: BLE001 — remonter la vraie cause à l'UI
             self._toast(f"Chargement impossible : {exc}", ok=False)
             return

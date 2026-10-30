@@ -55,6 +55,21 @@ def main() -> int:
     assert ui._resume_session({"config": {"bailleur": {}, "locataires": [{"nom": "A"}]}}) \
         == "Bailleur sans nom — 1 locataire."
 
+    # --- « Charger config » : jamais un formulaire vidé sans prévenir ---
+    assert len(ui._lire_config(cfg)[0]["locataires"]) == 3          # configuration normale
+    # Une saisie mise de côté ({"config": …}) se recharge comme une configuration.
+    relue, _ = ui._lire_config({"config": cfg, "propre": False, "horodatage": "x"})
+    assert relue["bailleur"]["nom"] == "Durand" and len(relue["locataires"]) == 3, relue
+    # Un fichier qui n'est pas une configuration est refusé : il chargeait un formulaire
+    # vide, sans avertissement, et le marquait comme enregistré.
+    for brut in ({}, {"verifier_maj": True, "classeurs": {}}, [], "texte",
+                 {"config": "abîmée"}):
+        try:
+            ui._lire_config(brut)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepté à tort : {brut!r}")
+
     # --- Écriture, relecture et mise de côté du fichier de session ---
     os.environ["APPDATA"] = tempfile.mkdtemp()           # _fichier_reglages() le lit à l'appel
     dossier = Path(os.environ["APPDATA"]) / "SuiviLoyers"

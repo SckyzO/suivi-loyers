@@ -25,6 +25,12 @@ Les changements notables de chaque version. Le format suit
   de la liste, qui gagne une ligne de hauteur. L'interrupteur s'appelle maintenant « Afficher
   les partis ». Dans une fenêtre étroite, ces commandes passent sous le titre.
 
+### Corrigé
+
+- « Charger config » sur un fichier qui n'est pas une configuration (aucun bailleur ni
+  locataire) vidait le formulaire sans prévenir. Le fichier est maintenant refusé avec un
+  message.
+
 ## [1.2.1] - 2026-10-29
 
 ### Ajouté
