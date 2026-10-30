@@ -91,6 +91,26 @@ def main() -> int:
     (dossier / "session.json").write_text("{ illisible", encoding="utf-8")
     assert ui._charger_session() == {}                   # corrompue : ignorée, pas d'erreur
 
+    # --- Saisies mises de côté : proposées dans les Réglages, la plus récente d'abord ---
+    os.environ["APPDATA"] = tempfile.mkdtemp()
+    assert ui._saisies_mises_de_cote() == []             # aucune : section masquée
+    mdc = ui._dossier_mises_de_cote()
+    mdc.mkdir(parents=True)
+    for fichier, quand, nom in (("a.json", "2026-10-28T09:02:00", "Dupont"),
+                                ("b.json", "2026-10-30T12:15:00", "Martin")):
+        (mdc / fichier).write_text(json.dumps(
+            {"config": {"bailleur": {"nom": nom}, "locataires": [{"nom": "Ana"}]},
+             "propre": False, "horodatage": quand}), encoding="utf-8")
+    (mdc / "abimee.json").write_text("{ illisible", encoding="utf-8")
+    liste = ui._saisies_mises_de_cote()
+    assert [s["config"]["bailleur"]["nom"] for s in liste] == ["Martin", "Dupont"], liste
+    assert (mdc / "abimee.json").is_file()               # illisible : ignorée, pas supprimée
+    assert ui._libelles_session(liste[0]) == \
+        ("Martin — 1 locataire", "modifiée le 30/10/2026 à 12:15"), \
+        ui._libelles_session(liste[0])
+    assert ui._libelles_session({"config": {"bailleur": {}, "locataires": []}}) == \
+        ("Bailleur sans nom — 0 locataire", "")
+
     print("UI PROTECTION OK")
     return 0
 

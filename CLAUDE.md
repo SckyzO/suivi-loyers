@@ -78,8 +78,13 @@ comme avant) ; la sauvegarde automatique ne démarre qu'après la réponse. Une 
 (refusée, ou remplacée par un chargement confirmé) part dans `saisies-mises-de-cote/`, un
 fichier daté par saisie (`_archiver_session`), jamais supprimé ni écrasé ; si ce déplacement
 échoue, rien n'est remplacé et la sauvegarde automatique ne démarre pas (elle effacerait la
-session). Supprimer un locataire passe par `_demander_suppression` (confirmation). Règles
-pures testées par `tests/ui_protection.py`.
+session). Les Réglages listent ces saisies (`_saisies_mises_de_cote`, section masquée s'il n'y
+en a pas) avec « Reprendre », qui passe par la même confirmation que « Charger config »
+(`_confirmer_remplacement`) ; le fichier repris reste sur le disque. « Charger config » lit
+le fichier via `_lire_config` : accepte une saisie mise de côté, refuse un fichier sans
+bailleur ni locataire (`migrer_config`, tolérant, rendait sinon un formulaire vide).
+Supprimer un locataire passe par `_demander_suppression` (confirmation). Règles pures testées
+par `tests/ui_protection.py`.
 
 ## Onglets du classeur
 
@@ -175,7 +180,8 @@ du tag. Les captures du README (`docs/screenshots/`) se refont avec le harnais `
 (états `readme`, `readme_dialog`, `readme_dark`, `readme_reprise`, `readme_focus`, `reglages`)
 + Playwright ;
 l'état `generation` rejoue une vraie génération sous un nouveau nom (sans dialogue natif),
-l'état `session` un redémarrage sur une saisie non enregistrée. Le classeur se rend via
+l'état `session` un redémarrage sur une saisie non enregistrée, l'état `reglages_mdc` les
+Réglages avec deux saisies mises de côté. Le classeur se rend via
 LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
 
 Le lint (`ruff.toml`) volontairement n'impose ni la longueur de ligne (E501) ni le tri d'imports

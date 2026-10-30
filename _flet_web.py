@@ -8,7 +8,7 @@ rapport | rapport_ecarts (compte rendu après génération) | generation (parcou
 génération sous un nouveau nom) | aide (1er lancement : mode d'emploi ouvert d'office) |
 suppression | suppression_parti (confirmation avant de supprimer un locataire) |
 session (1re connexion : saisie non enregistrée ; 2e connexion = redémarrage : reprise
-proposée)."""
+proposée) | reglages_mdc (Réglages avec deux saisies mises de côté)."""
 import os
 from pathlib import Path
 
@@ -79,9 +79,23 @@ def main(page):
         threading.Timer(1.2, lambda: gui.DialogueLocataire(
             page, app._modules_courants(), app._adresses_connues(), None,
             app._on_loc_valide(None)).ouvrir()).start()
-    if STATE == "reglages":
+    if STATE == "reglages_mdc":
+        # Deux saisies écartées (refusées au démarrage ou remplacées par un chargement).
+        import json
+        mdc = gui._dossier_mises_de_cote()
+        mdc.mkdir(parents=True, exist_ok=True)
+        for fichier, quand, bailleur, n in (
+                ("20261028-090200.json", "2026-10-28T09:02:00", {"nom": "Dupont"}, 1),
+                ("20261030-121500.json", "2026-10-30T12:15:00",
+                 {"nom": "Les Tilleuls", "sci": True, "sci_nom": "SCI"}, 3)):
+            (mdc / fichier).write_text(json.dumps(
+                {"config": {"bailleur": bailleur, "locataires": SEED[:n],
+                            "periode": {"annee_debut": 2026, "annee_fin": 2028}},
+                 "propre": False,
+                 "horodatage": quand}), encoding="utf-8")
+    if STATE in ("reglages", "reglages_mdc"):
         import threading
-        threading.Timer(3.5, lambda: app.page.show_dialog(app._dlg_reglages)).start()
+        threading.Timer(3.5, lambda: app._ouvrir_reglages(None)).start()
     if STATE == "session" and not gui._session_a_reprendre(gui._charger_session()):
         # 1re connexion : une saisie jamais enregistrée (la 2e connexion, comme un
         # redémarrage du logiciel, doit proposer de la reprendre).

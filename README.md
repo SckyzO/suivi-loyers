@@ -49,7 +49,9 @@ où elles restent.
 
 Ce que vous saisissez dans le logiciel (bailleur, locataires, options) est sauvegardé en
 continu. S'il est fermé avant d'avoir généré le classeur ou enregistré la configuration, il
-propose de reprendre cette saisie au lancement suivant.
+propose de reprendre cette saisie au lancement suivant. Une saisie que vous ne reprenez pas,
+ou que vous remplacez en chargeant une autre configuration, est mise de côté : les
+**Réglages** la listent avec un bouton **Reprendre**, et elle n'est jamais effacée.
 
 Le bouton **Aide**, en haut à droite, ouvre un mode d'emploi. Il s'affiche tout seul au
 premier lancement.

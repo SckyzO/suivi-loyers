@@ -15,6 +15,8 @@ Les changements notables de chaque version. Le format suit
   plus reportées dans le classeur et propose plutôt d'indiquer son départ.
 - Charger une configuration alors que la saisie en cours n'est pas enregistrée demande une
   confirmation. Une saisie écartée est mise de côté, jamais effacée.
+- Les Réglages listent les saisies mises de côté (non reprises au démarrage, ou remplacées
+  par un chargement), de la plus récente à la plus ancienne, avec un bouton « Reprendre ».
 
 ### Modifié
 

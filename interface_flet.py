@@ -427,17 +427,37 @@ def _session_a_reprendre(session: dict) -> dict | None:
     return cfg
 
 
-def _resume_session(session: dict) -> str:
-    """« SCI Lilas Durand — 3 locataires, modifiée le 29/10/2026 à 18:34. »"""
+def _libelles_session(session: dict) -> tuple[str, str]:
+    """(« SCI Lilas Durand — 3 locataires », « modifiée le 29/10/2026 à 18:34 ») ; date
+    vide si inconnue."""
     cfg = session["config"]
     nom = moteur.base_fichier(cfg.get("bailleur") or {}) or "Bailleur sans nom"
-    texte = f"{nom} — {_pluriel(len(cfg.get('locataires') or []), 'locataire')}"
+    qui = f"{nom} — {_pluriel(len(cfg.get('locataires') or []), 'locataire')}"
     try:
         quand = dt.datetime.fromisoformat(session.get("horodatage") or "")
-        texte += f", modifiée le {quand:%d/%m/%Y à %H:%M}"
     except ValueError:
-        pass
-    return texte + "."
+        return qui, ""
+    return qui, f"modifiée le {quand:%d/%m/%Y à %H:%M}"
+
+
+def _resume_session(session: dict) -> str:
+    """« SCI Lilas Durand — 3 locataires, modifiée le 29/10/2026 à 18:34. »"""
+    qui, quand = _libelles_session(session)
+    return f"{qui}, {quand}." if quand else f"{qui}."
+
+
+def _saisies_mises_de_cote() -> list[dict]:
+    """Saisies mises de côté à proposer dans les Réglages, la plus récemment modifiée
+    d'abord. Un fichier illisible n'est pas proposé, mais reste sur le disque."""
+    sessions = []
+    for f in _dossier_mises_de_cote().glob("*.json"):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("config"), dict):
+            sessions.append(data)
+    return sorted(sessions, key=lambda s: str(s.get("horodatage") or ""), reverse=True)
 
 
 def _initiales(nom: str, prenom: str) -> str:
@@ -506,7 +526,8 @@ AIDE = [
         "est créé à côté du classeur. C'est lui que vous rouvrirez avec « Charger config ».",
         "Ce que vous saisissez ici est aussi sauvegardé en continu : si le logiciel est fermé "
         "avant d'avoir généré le classeur, il vous propose de reprendre votre saisie au "
-        "lancement suivant.",
+        "lancement suivant. Une saisie que vous ne reprenez pas n'est jamais effacée : "
+        "retrouvez-la dans les Réglages, « Saisies mises de côté ».",
     ], False),
     ("Saisir les loyers, dans Excel", ft.Icons.EDIT_NOTE, [
         "Chaque locataire a son onglet (en vert). Chaque mois, tapez les montants reçus et "
@@ -1035,7 +1056,9 @@ class AppLoyers:
             "Reprendre votre saisie ?",
             [ft.Text("Le logiciel a été fermé avant que vos dernières modifications soient "
                      "enregistrées :", size=TS_CORPS),
-             ft.Text(_resume_session(session), size=TS_CORPS, weight=ft.FontWeight.W_600)],
+             ft.Text(_resume_session(session), size=TS_CORPS, weight=ft.FontWeight.W_600),
+             ft.Text("Si vous ne la reprenez pas maintenant, elle reste disponible dans les "
+                     "Réglages.", size=TS_CORPS)],
             [ft.TextButton("Ne pas reprendre", style=STYLE_BTN, on_click=ignorer),
              ft.FilledButton("Reprendre", icon=ft.Icons.RESTORE, style=STYLE_BTN,
                              on_click=reprendre)],
@@ -1380,18 +1403,23 @@ class AppLoyers:
                 return
             await self._choisir_config()
 
+        self._confirmer_remplacement(en_cours, "Charger quand même", ft.Icons.FOLDER_OPEN,
+                                     charger_quand_meme)
+
+    def _confirmer_remplacement(self, en_cours: dict, bouton: str, icone, continuer):
+        """« Remplacer la saisie en cours ? » avant de charger ou de reprendre une autre
+        saisie : `continuer` (handler du bouton) la met de côté puis remplace."""
         self._dialogue(
             "Remplacer la saisie en cours ?",
             [ft.Text("Vos dernières modifications n'ont pas encore été enregistrées :",
                      size=TS_CORPS),
              ft.Text(_resume_session({"config": en_cours}), size=TS_CORPS,
                      weight=ft.FontWeight.W_600),
-             ft.Text("Pour les garder, générez le classeur ou cliquez sur « Enregistrer "
-                     "config » avant de charger une autre configuration.", size=TS_CORPS)],
+             ft.Text("Si vous continuez, elles sont mises de côté : vous pourrez les "
+                     "reprendre depuis les Réglages.", size=TS_CORPS)],
             [ft.TextButton("Annuler", style=STYLE_BTN,
                            on_click=lambda e: self.page.pop_dialog()),
-             ft.FilledButton("Charger quand même", icon=ft.Icons.FOLDER_OPEN,
-                             style=STYLE_BTN, on_click=charger_quand_meme)],
+             ft.FilledButton(bouton, icon=icone, style=STYLE_BTN, on_click=continuer)],
             icone=ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=C_PARTI))
 
     async def _choisir_config(self):
@@ -1737,12 +1765,15 @@ class AppLoyers:
         self._maj_switch = ft.Switch(
             label="Vérifier les mises à jour au démarrage",
             value=self._maj_active, on_change=self._toggle_maj)
+        # Saisies mises de côté : remplie à chaque ouverture, masquée s'il n'y en a pas.
+        self._section_mises_de_cote = ft.Column(spacing=8, tight=True, visible=False)
         contenu = ft.Container(width=420, height=490, content=ft.Column([
             titre_section("Apparence de l'application",
                           ft.Icons.BRIGHTNESS_6_OUTLINED),
             rangee_apparence,
             titre_section("Apparence du classeur", ft.Icons.PALETTE_OUTLINED),
             self.theme, self.police,
+            self._section_mises_de_cote,
             titre_section("À propos", ft.Icons.INFO_OUTLINE),
             ft.Text(f"{APP_TITRE} — version {APP_VERSION}", size=TS_CORPS,
                     weight=ft.FontWeight.W_500),
@@ -1760,7 +1791,60 @@ class AppLoyers:
             actions_alignment=ft.MainAxisAlignment.END)
 
     def _ouvrir_reglages(self, _):
+        self._maj_mises_de_cote()
         self.page.show_dialog(self._dlg_reglages)
+
+    def _maj_mises_de_cote(self):
+        """Section « Saisies mises de côté » des Réglages (cf. _saisies_mises_de_cote)."""
+        lignes = []
+        for session in _saisies_mises_de_cote():
+            qui, quand = _libelles_session(session)
+            lignes.append(ft.Row([
+                ft.Column([ft.Text(qui, size=TS_CORPS, weight=ft.FontWeight.W_500),
+                           ft.Text(quand, size=TS_LABEL, color=C_MUTED)],
+                          spacing=0, tight=True, expand=True),
+                ft.OutlinedButton(
+                    "Reprendre", icon=ft.Icons.RESTORE, style=STYLE_BTN,
+                    on_click=lambda e, s=session: self._reprendre_mise_de_cote(s)),
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER))
+        self._section_mises_de_cote.controls = [
+            titre_section("Saisies mises de côté", ft.Icons.RESTORE), *lignes]
+        self._section_mises_de_cote.visible = bool(lignes)
+
+    def _reprendre_mise_de_cote(self, session: dict):
+        """Reprend une saisie mise de côté. Celle en cours, si elle n'est pas enregistrée,
+        est mise de côté à son tour après confirmation. Le fichier repris reste sur le
+        disque : une saisie mise de côté n'est jamais supprimée."""
+        self.page.pop_dialog()                          # ferme les Réglages
+
+        def reprendre():
+            try:
+                cfg, _avertis = moteur.migrer_config(session["config"])
+            except Exception as exc:  # noqa: BLE001 — saisie abîmée : rien n'est remplacé
+                self._alerte("Reprise impossible", f"Cette saisie est illisible ({exc}).")
+                return
+            self._peupler_depuis(cfg)   # reste « non enregistrée » jusqu'au .json
+            self._toast("Saisie reprise. Pensez à générer le classeur ou à "
+                        "enregistrer la configuration.")
+
+        en_cours = self._modifs_non_enregistrees()
+        if en_cours is None:
+            reprendre()
+            return
+
+        def reprendre_quand_meme(_):
+            self.page.pop_dialog()
+            erreur = self._mettre_session_de_cote()
+            if erreur:
+                self._alerte("Reprise annulée",
+                             f"Votre saisie n'a pas pu être mise de côté ({erreur}). "
+                             "Enregistrez-la avec « Enregistrer config » avant d'en "
+                             "reprendre une autre.")
+                return
+            reprendre()
+
+        self._confirmer_remplacement(en_cours, "Reprendre quand même", ft.Icons.RESTORE,
+                                     reprendre_quand_meme)
 
     def _build_aide(self):
         """Dialogue « Mode d'emploi » construit depuis AIDE (section mise en avant
