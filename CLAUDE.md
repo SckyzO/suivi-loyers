@@ -42,10 +42,12 @@ et ses `pick_files`/`save_file` sont des **coroutines** — les handlers qui les
 `ft.Alignment.CENTER*` (majuscules), pas `ft.padding.*`. `page.launch_url()` n'existe plus
 (1.0) : ouvrir une URL via le service `ft.UrlLauncher()` (coroutine, garder une référence sinon
 le registre le purge). Libellé d'un bouton = `content` : l'ancien attribut `text` est ignoré
-sans erreur. Dépréciés en 1.0, retirés en 1.3 : `border_radius`/`border_color`/
-`focused_border_color` des `TextField`/`Dropdown` (à migrer vers `border=OutlineInputBorder(...)`
-avec contrôle visuel). Toute montée mineure de Flet casse l'API : la faire à la main avec rendu
-(Dependabot n'accepte que les patchs). Un `TextStyle` de `text_theme` doit
+sans erreur. Bordure des champs (`TextField`/`Dropdown`) : `border=BORDURE_CHAMP` (dict
+`ControlState` → `OutlineInputBorder`) ; ne pas revenir à `border_radius`/`border_color`/
+`focused_border_color`, dépréciés en 1.0 et retirés en 1.3. Migration validée par captures
+avant/après identiques au pixel (le rendu web a un défaut de police intermittent : refaire une
+capture avant de conclure à un écart). Toute montée mineure de Flet casse l'API : la faire à
+la main avec rendu (Dependabot n'accepte que les patchs). Un `TextStyle` de `text_theme` doit
 porter une couleur explicite (`ft.Colors.ON_SURFACE`) sinon le texte reste blanc en thème clair.
 Réglages persistés par `_charger_reglages`/`_enregistrer_reglages` (→ `%APPDATA%/SuiviLoyers/
 settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
@@ -53,7 +55,10 @@ settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jo
 `afficher_partis` (défaut `true`) mémorise le toggle « Afficher les locataires partis » de la
 table : **filtre d'affichage seulement**, le classeur garde tous les locataires. Le filtrage
 vit dans des fonctions pures de module (`_filtrer_locataires`, `_partis_masques`,
-`_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`. La clé `classeurs`
+`_libelle_compteur`, `_est_parti`), testées par `tests/ui_filtres.py`, comme le choix des
+colonnes selon la largeur du tableau (`_colonnes_pour_largeur` : chaque colonne a une largeur
+lisible `min` et un ordre de retrait `masquable` ; calibrés pour que tout tienne à la largeur
+par défaut, 1180 px). La clé `classeurs`
 (slug du bailleur → chemin) mémorise le **dernier classeur généré**, proposé d'office à la
 génération ; si le fichier choisi ne porte pas les saisies attendues (neuf, vide, autre
 classeur), l'interface demande d'où les reprendre (`_cas_reprise`) puis affiche un compte
@@ -162,7 +167,8 @@ make linux      # binaire Linux -> dist/linux/SuiviLoyers
 Chaque changement visible par l'utilisateur ajoute une ligne sous `[Non publié]` dans
 `CHANGELOG.md` (Keep a Changelog, en français) ; à la release, cette section prend le numéro
 du tag. Les captures du README (`docs/screenshots/`) se refont avec le harnais `_flet_web.py`
-(états `readme`, `readme_dialog`, `readme_dark`, `readme_reprise`, `reglages`) + Playwright ;
+(états `readme`, `readme_dialog`, `readme_dark`, `readme_reprise`, `readme_focus`, `reglages`)
++ Playwright ;
 l'état `generation` rejoue une vraie génération sous un nouveau nom (sans dialogue natif),
 l'état `session` un redémarrage sur une saisie non enregistrée. Le classeur se rend via
 LibreOffice (xlsx -> PDF -> PNG, cf. mémoire projet).
