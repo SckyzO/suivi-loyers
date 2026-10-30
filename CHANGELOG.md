@@ -32,6 +32,9 @@ Les changements notables de chaque version. Le format suit
 - « Charger config » sur un fichier qui n'est pas une configuration (aucun bailleur ni
   locataire) vidait le formulaire sans prévenir. Le fichier est maintenant refusé avec un
   message.
+- Une coupure pendant l'enregistrement des réglages pouvait les effacer, et avec eux le
+  dernier classeur retenu pour chaque bailleur. Un échec d'enregistrement est maintenant
+  signalé au lieu de passer inaperçu.
 
 ## [1.2.1] - 2026-10-29
 

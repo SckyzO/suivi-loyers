@@ -50,7 +50,8 @@ capture avant de conclure à un écart). Toute montée mineure de Flet casse l'A
 la main avec rendu (Dependabot n'accepte que les patchs). Un `TextStyle` de `text_theme` doit
 porter une couleur explicite (`ft.Colors.ON_SURFACE`) sinon le texte reste blanc en thème clair.
 Réglages persistés par `_charger_reglages`/`_enregistrer_reglages` (→ `%APPDATA%/SuiviLoyers/
-settings.json`) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
+settings.json`, écriture atomique sous verrou ; l'interface passe par `_sauver_reglages`, qui
+signale un échec au lieu de l'avaler) ; la clé `verifier_maj` pilote la **vérification de mise à jour** au démarrage
 (thread, API GitHub `releases/latest`, silencieuse hors-ligne, notif SnackBar + lien). La clé
 `afficher_partis` (défaut `true`) mémorise le toggle « Afficher les partis » de la
 table : **filtre d'affichage seulement**, le classeur garde tous les locataires. Le filtrage

@@ -70,13 +70,19 @@ def _charger_reglages() -> dict:
         return {}
 
 
+_VERROU_REGLAGES = threading.Lock()   # un handler et la fin d'une génération peuvent écrire
+
+
 def _enregistrer_reglages(data: dict) -> None:
-    try:
-        f = _fichier_reglages()
+    """Écrit settings.json via un fichier temporaire : une coupure en pleine écriture ne le
+    laisse jamais illisible (il retient le dernier classeur de chaque bailleur). Lève
+    OSError en cas d'échec : à signaler, l'appelant ne doit pas l'avaler."""
+    f = _fichier_reglages()
+    with _VERROU_REGLAGES:
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:  # noqa: BLE001 — best-effort, un échec ne bloque pas l'appli
-        pass
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, f)
 
 
 def _version_tuple(v: str) -> tuple:
@@ -1316,7 +1322,7 @@ class AppLoyers:
     def _on_toggle_partis(self, e):
         self._afficher_partis = bool(self._switch_partis.value)
         self._reglages["afficher_partis"] = self._afficher_partis
-        _enregistrer_reglages(self._reglages)
+        self._sauver_reglages()
         self._rafraichir_table()
 
     def _on_taille_table(self, e):
@@ -1450,7 +1456,7 @@ class AppLoyers:
             _memoriser_classeur(self._reglages,
                                 moteur.base_slug(cfg.get("bailleur") or {}) or "bailleur",
                                 voisin)
-            _enregistrer_reglages(self._reglages)
+            self._sauver_reglages()
         msg = "Configuration chargée."
         if avertis:
             msg += " Adaptations : " + " ; ".join(avertis)
@@ -1646,7 +1652,7 @@ class AppLoyers:
             return
         self._fin_generation()
         _memoriser_classeur(self._reglages, self._slug(self._cfg_valide), sortie)
-        _enregistrer_reglages(self._reglages)
+        self._sauver_reglages()
         lignes = _lignes_rapport(rapport, sortie)
         if self._enregistrer_aussi.value:
             cfg = self._config()
@@ -1725,6 +1731,14 @@ class AppLoyers:
         self.page.show_dialog(ft.SnackBar(ft.Text(msg),
                                           bgcolor=None if ok else ft.Colors.ERROR))
         self.page.update()
+
+    def _sauver_reglages(self):
+        """Écrit les réglages ; un échec est signalé, pas avalé (sans eux, le logiciel ne
+        propose plus le dernier classeur de chaque bailleur)."""
+        try:
+            _enregistrer_reglages(self._reglages)
+        except OSError as exc:
+            self._toast(f"Réglages non enregistrés : {exc}", ok=False)
 
     def _aide(self, texte: str) -> ft.Control:
         """« ? » d'aide : infobulle au survol ET bandeau au clic (tactile/clic)."""
@@ -1879,7 +1893,7 @@ class AppLoyers:
         # ouverture d'une version qui l'introduit).
         if not self._reglages.get("aide_vue"):
             self._reglages["aide_vue"] = True
-            _enregistrer_reglages(self._reglages)
+            self._sauver_reglages()
 
     async def _ouvrir_github(self, _):
         if GITHUB_URL:
@@ -1919,7 +1933,7 @@ class AppLoyers:
     def _toggle_maj(self, e):
         self._maj_active = bool(self._maj_switch.value)
         self._reglages["verifier_maj"] = self._maj_active
-        _enregistrer_reglages(self._reglages)
+        self._sauver_reglages()
 
     def _entete(self) -> ft.Control:
         marque = ft.Container(

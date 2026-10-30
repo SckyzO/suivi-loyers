@@ -2,7 +2,8 @@
 
 Couvre les fonctions pures de `interface_flet` qui évitent de perdre ce qui est saisi dans
 le logiciel : confirmation avant de supprimer un locataire, sauvegarde automatique de la
-saisie en cours (session.json) et sa reprise au démarrage. Importer `interface_flet`
+saisie en cours (session.json), sa reprise au démarrage, les saisies mises de côté, le
+chargement d'une configuration et l'écriture des réglages. Importer `interface_flet`
 demande Flet, mais aucune fenêtre n'est ouverte.
 """
 
@@ -110,6 +111,24 @@ def main() -> int:
         ui._libelles_session(liste[0])
     assert ui._libelles_session({"config": {"bailleur": {}, "locataires": []}}) == \
         ("Bailleur sans nom — 0 locataire", "")
+
+    # --- Réglages (dont le dernier classeur de chaque bailleur) : écriture atomique ---
+    os.environ["APPDATA"] = tempfile.mkdtemp()
+    ui._enregistrer_reglages({"aide_vue": True, "classeurs": {"durand": "/x/Suivi.xlsx"}})
+    assert ui._charger_reglages()["classeurs"] == {"durand": "/x/Suivi.xlsx"}
+    reglages = ui._fichier_reglages()
+    assert sorted(p.name for p in reglages.parent.iterdir()) == ["settings.json"], \
+        "écriture atomique : aucun fichier temporaire ne doit rester"
+    # Un échec d'écriture remonte à l'appelant, qui le signale : il était avalé, et le
+    # logiciel oubliait le dernier classeur sans prévenir.
+    reglages.unlink()
+    reglages.mkdir()                                     # cible impossible à remplacer
+    try:
+        ui._enregistrer_reglages({"aide_vue": True})
+    except OSError:
+        pass
+    else:
+        raise AssertionError("échec d'écriture des réglages avalé sans prévenir")
 
     print("UI PROTECTION OK")
     return 0
