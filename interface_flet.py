@@ -390,15 +390,25 @@ def _initiales(nom: str, prenom: str) -> str:
 
 STYLE_BTN = ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=RAYON))
 
+# Bordure des champs : invisible au repos (le fond rempli suffit), trait primaire de 2 px
+# au focus ; états désactivé et erreur laissés au thème. Remplace border_radius /
+# border_color / focused_border_color, dépréciés en Flet 1.0 et retirés en 1.3 (rendu
+# identique : même traduction côté client).
+BORDURE_CHAMP = {
+    ft.ControlState.DEFAULT: ft.OutlineInputBorder(
+        border_radius=RAYON, side=ft.BorderSide(1, ft.Colors.TRANSPARENT)),
+    ft.ControlState.FOCUSED: ft.OutlineInputBorder(
+        border_radius=RAYON, side=ft.BorderSide(2, ft.Colors.PRIMARY)),
+}
+
 
 def champ_texte(valeur="", label="", largeur=None, expand=False,
                 icone=None) -> ft.TextField:
     """Champ texte au style maison (rempli, arrondi, compact)."""
     return ft.TextField(
         value="" if valeur is None else str(valeur), label=label, width=largeur,
-        expand=expand, filled=True, bgcolor=C_FIELD, border_radius=RAYON,
-        border_color=ft.Colors.TRANSPARENT, prefix_icon=icone,
-        focused_border_color=ft.Colors.PRIMARY, dense=True,
+        expand=expand, filled=True, bgcolor=C_FIELD, border=BORDURE_CHAMP,
+        prefix_icon=icone, dense=True,
         text_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
         content_padding=ft.Padding.symmetric(vertical=12, horizontal=14),
         label_style=ft.TextStyle(size=TS_LABEL, color=C_MUTED))
@@ -408,9 +418,8 @@ def champ_liste(options, valeur=None, label="", expand=False,
                 editable=False, largeur=None, icone=None) -> ft.Dropdown:
     return ft.Dropdown(
         label=label, value=valeur, expand=expand, width=largeur, filled=True,
-        bgcolor=C_FIELD, leading_icon=icone,
-        border_radius=RAYON, border_color=ft.Colors.TRANSPARENT, editable=editable,
-        focused_border_color=ft.Colors.PRIMARY, text_size=15, dense=True,
+        bgcolor=C_FIELD, leading_icon=icone, border=BORDURE_CHAMP, editable=editable,
+        text_size=15, dense=True,
         content_padding=ft.Padding.symmetric(vertical=12, horizontal=14),
         label_style=ft.TextStyle(size=TS_LABEL, color=C_MUTED),
         options=[ft.DropdownOption(o) for o in options])
@@ -496,9 +505,7 @@ class ChampDate(ft.Container):
         self._page = page
         self._champ = ft.TextField(
             value=valeur, hint_text="AAAA-MM-JJ", width=largeur, filled=True,
-            bgcolor=C_FIELD,
-            border_radius=RAYON, border_color=ft.Colors.TRANSPARENT,
-            focused_border_color=ft.Colors.PRIMARY, dense=True,
+            bgcolor=C_FIELD, border=BORDURE_CHAMP, dense=True,
             text_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
             content_padding=ft.Padding.symmetric(vertical=12, horizontal=14), disabled=not actif,
             # Icône cliquable compacte (un IconButton gonflerait la hauteur du champ).
@@ -1846,8 +1853,7 @@ class AppLoyers:
 
         self._champ_recherche = ft.TextField(
             hint_text="Rechercher…", width=260, filled=True, bgcolor=C_FIELD,
-            border_radius=RAYON, border_color=ft.Colors.TRANSPARENT,
-            focused_border_color=ft.Colors.PRIMARY, dense=True,
+            border=BORDURE_CHAMP, dense=True,
             prefix_icon=ft.Icons.SEARCH, on_change=self._on_recherche,
             text_style=ft.TextStyle(size=14),
             content_padding=ft.Padding.symmetric(vertical=8, horizontal=14))

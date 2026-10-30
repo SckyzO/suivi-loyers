@@ -59,6 +59,10 @@ def main(page):
         app.b_adresse.value = "12 rue des Lilas, 35000 Rennes"
         app.b_tel.value, app.b_email.value = "06 12 34 56 78", "contact@les-tilleuls.fr"
         page.update()
+    if STATE == "readme_focus":
+        # Champ actif : bordure de focus (contrôle visuel des bordures des champs).
+        import threading
+        threading.Timer(3.5, lambda: page.run_task(app.b_prenom.focus)).start()
     if STATE == "readme_dark":
         app.apparence = "sombre"
         app._appliquer_apparence()
