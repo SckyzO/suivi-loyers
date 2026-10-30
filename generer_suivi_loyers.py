@@ -1903,7 +1903,7 @@ def construire_guide(wb: Workbook, cfg: dict) -> None:
                  "dans le logiciel « Suivi des loyers », chargez la configuration (le fichier "
                  ".json à côté du classeur), faites la modification et cliquez sur « Générer "
                  "le classeur » en choisissant ce même fichier. Vos montants saisis sont repris "
-                 "et une copie de sécurité de l'ancien fichier (.bak) est gardée à côté.",
+                 "et l'ancien fichier est copié dans le dossier « Copies de sécurité ».",
                  texte_blanc=True)
     ws.row_dimensions[r].height = 30
     r = pastille(r, "Attention", CHARTE.partiel,
@@ -2066,7 +2066,7 @@ class RapportGeneration:
     """Ce qu'une génération a repris, écarté et sauvegardé : de quoi informer
     l'utilisateur, aucune saisie ne disparaît en silence."""
     source: Path | None = None       # classeur dont les saisies ont été lues
-    sauvegarde: Path | None = None   # copie .bak du classeur remplacé
+    sauvegarde: Path | None = None   # copie de sécurité du classeur remplacé (DOSSIER_COPIES)
     mois_repris: int = 0             # mois dont au moins une saisie a été replacée
     charges_reprises: int = 0        # charges réelles (régularisation)
     indices_repris: int = 0          # indices IRL
@@ -2137,6 +2137,23 @@ def _verifier_remplacable(sortie: Path) -> None:
             f"Impossible de remplacer « {sortie.name} » : le fichier est sans doute ouvert "
             "dans Excel (ou en lecture seule). Fermez-le puis relancez la "
             "génération.") from exc
+
+
+# Copies de sécurité rangées à part : à côté du classeur, elles s'ouvraient dans Excel comme
+# lui, et ce qu'on y saisissait n'était jamais repris.
+DOSSIER_COPIES = "Copies de sécurité"
+
+
+def chemin_copie_securite(sortie: Path, quand: dt.datetime) -> Path:
+    """Copie de sécurité de `sortie` : dossier « Copies de sécurité » à côté du classeur,
+    nom lisible (« Suivi - copie du 30-10-2026 12h15.xlsx »), jamais un fichier existant
+    (deux générations dans la même minute : « (2) », « (3) »…)."""
+    dossier = sortie.parent / DOSSIER_COPIES
+    base = f"{sortie.stem} - copie du {quand:%d-%m-%Y %Hh%M}"
+    cible, n = dossier / f"{base}.xlsx", 2
+    while cible.exists():
+        cible, n = dossier / f"{base} ({n}).xlsx", n + 1
+    return cible
 
 
 def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
@@ -2232,12 +2249,12 @@ def generer_workbook(cfg: dict, sortie: Path, *, preserver: bool = True,
 
     sortie.parent.mkdir(parents=True, exist_ok=True)
     # Sauvegarde de secours avant d'écraser (récupération en cas de couac).
-    # Nom horodaté : on conserve chaque sauvegarde au lieu d'écraser la précédente.
+    # Nom daté et unique : on conserve chaque sauvegarde au lieu d'écraser la précédente.
     # Sans copie, on n'écrase pas : l'utilisatrice ne fait aucune sauvegarde elle-même.
     if sortie.is_file():
-        horo = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-        bak = sortie.with_name(f"{sortie.stem}.bak-{horo}.xlsx")
+        bak = chemin_copie_securite(sortie, dt.datetime.now())
         try:
+            bak.parent.mkdir(exist_ok=True)
             shutil.copy2(sortie, bak)
             rapport.sauvegarde = bak
         except OSError as exc:

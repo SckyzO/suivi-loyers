@@ -117,16 +117,19 @@ Flux de données clé :
   `recolter_saisies` (qui lit **chaque feuille locataire**, pas un onglet `Suivi` unique) puis
   réinjection via `construire_feuilles_locataires(saisies=...)`. Clé `(nom, année, mois)`.
   Ne jamais écraser un fichier sans cette reprise quand `preserver=True`. Avant d'écraser,
-  `generer_workbook` copie l'ancien classeur en `<nom>.bak-<horodatage>.xlsx` : ne jamais
-  retirer cette copie. **Exigence produit : aucune perte de saisie, même « au cas où »** ;
-  toute fonction qui supprime ou écarte des données (locataire supprimé ou renommé, période
+  `generer_workbook` copie l'ancien classeur dans `DOSSIER_COPIES` (« Copies de sécurité »,
+  à côté du classeur) sous `<nom> - copie du JJ-MM-AAAA HHhMM.xlsx`, jamais écrasée
+  (`chemin_copie_securite` ajoute « (2) »… dans la même minute) : ne jamais retirer cette
+  copie. Copies modifiables (choix du mainteneur, pas de lecture seule) ; celles d'avant la
+  1.3.0 (`<nom>.bak-<horodatage>.xlsx`) restent à côté du classeur, jamais déplacées.
+  **Exigence produit : aucune perte de saisie, même « au cas où »** ; toute fonction qui supprime ou écarte des données (locataire supprimé ou renommé, période
   réduite) doit soit les reprendre, soit prévenir l'utilisateur et lui laisser une copie.
   `generer_workbook(..., source=, rapport=)` : `source` = classeur dont lire les saisies
   (générer sous un nouveau nom sans repartir de zéro ; jamais modifié ; absent → erreur,
   jamais un classeur vide). `rapport` (`RapportGeneration`) reçoit ce qui est repris, écarté
-  (`Ecartee` avec motif et unité) et la copie `.bak`, calculés par **relecture** du nouveau
+  (`Ecartee` avec motif et unité) et la copie de sécurité, calculés par **relecture** du nouveau
   classeur (`_bilan_reprise`) : toute nouvelle saisie préservée doit avoir son `recolter_*`
-  pour être vérifiée. Copie `.bak` impossible → la génération s'arrête (ne jamais avaler cette
+  pour être vérifiée. Copie de sécurité impossible → la génération s'arrête (ne jamais avaler cette
   erreur) ; classeur non remplaçable (ouvert dans Excel, lecture seule) → `_verifier_remplacable`
   échoue avant tout travail. Le pré-remplissage `=C<ligne>` de la régularisation n'est pas une
   saisie (`recolter_regularisation` l'ignore, sinon il pointerait une autre ligne).
@@ -204,7 +207,7 @@ tolérant (ne lève pas pour un champ manquant), il convertit les anciens schém
 et affiche les avertissements. Toute évolution de schéma incrémente `CONFIG_VERSION` et ajoute
 sa transition ici.
 
-Fait : sauvegarde `.bak` du classeur avant écrasement (`generer_workbook`), coercition douce des
+Fait : copie de sécurité du classeur avant écrasement (`generer_workbook`), coercition douce des
 montants (virgule décimale) + validation stricte dans `valider_config` (montants/dates/unicité),
 et avertissement explicite si la config vient d'une version **plus récente** que le binaire.
 

@@ -52,11 +52,12 @@ def main() -> int:
         assert f.read_bytes() == avant, "classeur modifié malgré le verrou"
     finally:
         k32.CloseHandle(h)
-    assert not list(tmp.glob("*.bak-*")), "copie de sécurité créée pour rien"
+    copies = tmp / g.DOSSIER_COPIES
+    assert not list(copies.glob("*.xlsx")), "copie de sécurité créée pour rien"
 
     # Verrou levé (classeur fermé dans Excel) : la génération repasse.
     g.generer_workbook(cfg, f)
-    assert list(tmp.glob("*.bak-*")), "copie de sécurité attendue après remplacement"
+    assert list(copies.glob("*.xlsx")), "copie de sécurité attendue après remplacement"
     print("VERROU WINDOWS OK")
     return 0
 

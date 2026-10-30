@@ -328,16 +328,21 @@ def _lignes_rapport(rapport: moteur.RapportGeneration, sortie: Path) -> list[tup
         lignes.append(("ok", f"Saisies reprises{de} : {_enumeration(repris)}."))
     else:
         lignes.append(("info", f"Aucune saisie à reprendre dans « {src.name} »."))
+    def cite(f: Path) -> str:
+        # Une copie de sécurité est rangée dans son dossier : le dire pour la retrouver.
+        dossier = "" if f.parent == sortie.parent else f" (dossier « {f.parent.name} »)"
+        return f"« {f.name} »{dossier}"
+
     if rapport.sauvegarde:
         lignes.append(("info", "Copie de sécurité de l'ancien fichier : "
-                               f"« {rapport.sauvegarde.name} »."))
+                               f"{cite(rapport.sauvegarde)}."))
     if rapport.ecartees:
         lignes += [("alerte", f"Non repris : {e.quoi}, {_pluriel(e.nombre, e.unite)} — "
                               f"{e.motif}.") for e in rapport.ecartees]
         # Sur place : l'ancien fichier n'existe plus que dans la copie de sécurité ;
         # depuis un autre classeur : celui-ci n'a pas été modifié.
         lieu = (rapport.sauvegarde or src) if sur_place else src
-        lignes.append(("alerte", f"Ces saisies restent dans « {lieu.name} » : rien "
+        lignes.append(("alerte", f"Ces saisies restent dans {cite(lieu)} : rien "
                                  "n'est perdu."))
     return lignes
 
@@ -548,15 +553,18 @@ AIDE = [
         "4. Cliquez sur « Générer le classeur », gardez le même fichier (il vous est "
         "proposé) et acceptez de le remplacer.",
         "Vos montants déjà saisis sont repris automatiquement, et une copie de sécurité de "
-        "l'ancien fichier est gardée à côté.",
+        "l'ancien fichier est gardée dans le dossier « Copies de sécurité ».",
         "Ne créez pas un nouveau fichier à chaque mise à jour : il ne contiendrait pas vos "
         "saisies. Si cela arrive, le logiciel vous propose de les reprendre.",
     ], True),
     ("Copies de sécurité", ft.Icons.SHIELD_OUTLINED, [
-        "À chaque mise à jour, l'ancien classeur est copié à côté sous le nom « nom du "
-        "classeur.bak-date-heure.xlsx ». Le logiciel ne supprime jamais ces copies.",
-        "Pour revenir en arrière, ouvrez la copie dans Excel et enregistrez-la sous le nom "
-        "du classeur (Fichier > Enregistrer sous).",
+        "À chaque mise à jour, l'ancien classeur est copié dans le dossier « Copies de "
+        "sécurité », à côté du classeur, sous le nom « nom du classeur - copie du date "
+        "heure.xlsx ». Le logiciel ne supprime jamais ces copies. Celles des versions "
+        "précédentes (« .bak ») sont restées à côté du classeur.",
+        "Ne saisissez rien dans une copie : ce qui y est tapé n'est pas repris dans le "
+        "classeur. Pour revenir en arrière, ouvrez la copie dans Excel et enregistrez-la à "
+        "la place du classeur (Fichier > Enregistrer sous, dans le dossier du classeur).",
     ], False),
     ("Garder une version datée", ft.Icons.EVENT_OUTLINED, [
         "Copiez le fichier dans l'Explorateur de fichiers (clic droit > Copier, puis "

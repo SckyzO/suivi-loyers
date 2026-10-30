@@ -168,7 +168,7 @@ def main() -> int:
                              "locataires": [{"nom": "Z", "loyer": 100, "date_entree": "2025-01-01"}]})
     assert norm["modules"]["documents"] is True
 
-    # Bloc 1 : version plus récente, coercition virgule, .bak + orphelins.
+    # Bloc 1 : version plus récente, coercition virgule, copie de sécurité + orphelins.
     _, avv = g.migrer_config({**bse, "version": 999,
                               "locataires": [{"nom": "Z", "loyer": 100, "date_entree": "2025-01-01"}]})
     assert any("récente" in a.lower() for a in avv), avv
@@ -188,11 +188,18 @@ def main() -> int:
         {"nom": "Bea", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}),
         fb, orphelins_out=orph)
     assert "Ana" in orph, orph
-    assert list(tmp.glob("bak.bak-*.xlsx")), "sauvegarde .bak horodatée manquante"
+    # Copie de sécurité rangée dans « Copies de sécurité », au nom lisible, rien à côté du
+    # classeur ; une 2e génération dans la même minute donne une 2e copie (jamais écrasée).
+    copies = tmp / g.DOSSIER_COPIES
+    assert len(list(copies.glob("bak - copie du *.xlsx"))) == 1, list(tmp.rglob("*"))
+    assert not list(tmp.glob("*.bak-*")), "copie rangée à côté du classeur"
+    g.generer_workbook(g.valider_config({**bse, "locataires": [
+        {"nom": "Bea", "identifiant": "M1", "loyer": 100, "date_entree": "2025-01-01"}]}), fb)
+    assert len(list(copies.glob("bak - copie du *.xlsx"))) == 2, list(copies.iterdir())
 
     # Copie de sécurité impossible : la génération s'arrête AVANT d'écraser le classeur.
     avant = fb.read_bytes()
-    nb_bak = len(list(tmp.glob("bak.bak-*.xlsx")))
+    nb_bak = len(list(copies.glob("bak - copie du *.xlsx")))
     copie_orig = g.shutil.copy2
 
     def copie_en_echec(*_a, **_k):
@@ -224,7 +231,7 @@ def main() -> int:
         finally:
             fb.chmod(0o644)
         assert fb.read_bytes() == avant
-        assert len(list(tmp.glob("bak.bak-*.xlsx"))) == nb_bak, "copie créée pour rien"
+        assert len(list(copies.glob("bak - copie du *.xlsx"))) == nb_bak, "copie créée pour rien"
 
     # Reprise depuis un AUTRE classeur (source=) : générer sous un nouveau nom sans repartir
     # de zéro. Le classeur source n'est ni modifié ni copié.
@@ -249,7 +256,7 @@ def main() -> int:
     sn = load_workbook(fn)["M1 - Ana"]
     rn_, en_ = ligne_entete(sn)
     assert [sn.cell(rn_ + i, en_["Part locataire reçue"]).value for i in (1, 2)] == [88, 99]
-    assert fa.read_bytes() == avant_a and not list(tmp.glob("ancien.bak-*")), \
+    assert fa.read_bytes() == avant_a and not list(copies.glob("ancien - copie du *")), \
         "le classeur source ne doit pas être touché"
     try:
         g.generer_workbook(cfg_n, fn, source=tmp / "absent.xlsx")
@@ -257,13 +264,15 @@ def main() -> int:
     except FileNotFoundError:
         pass
 
-    # Rapport d'une régénération sur place : copie .bak + saisies écartées avec leur motif.
+    # Rapport d'une régénération sur place : copie de sécurité + saisies écartées et motifs.
     # Ana part fin janvier : février sort de sa période ; Bob supprimé n'avait rien saisi.
     rap = g.RapportGeneration()
     g.generer_workbook(g.valider_config({**bse, "locataires": [
         {**loc_ana, "date_sortie": "2025-01-31"}]}), fn, rapport=rap)
     assert rap.source == fn and rap.mois_repris == 1, rap
-    assert rap.sauvegarde and rap.sauvegarde.is_file() and ".bak-" in rap.sauvegarde.name
+    assert rap.sauvegarde and rap.sauvegarde.is_file() and \
+        rap.sauvegarde.parent == fn.parent / g.DOSSIER_COPIES and \
+        rap.sauvegarde.name.startswith(f"{fn.stem} - copie du "), rap.sauvegarde
     assert [(e.quoi, e.nombre) for e in rap.ecartees] == [("Ana", 1)], rap.ecartees
     assert "période" in rap.ecartees[0].motif, rap.ecartees[0].motif
     # Locataire supprimé : toutes ses saisies sont écartées, motif explicite.

@@ -26,6 +26,9 @@ Les changements notables de chaque version. Le format suit
 - L'interrupteur des partis, la recherche et le bouton « Ajouter » sont sur la ligne du titre
   de la liste, qui gagne une ligne de hauteur. L'interrupteur s'appelle maintenant « Afficher
   les partis ». Dans une fenêtre étroite, ces commandes passent sous le titre.
+- Les copies de sécurité sont rangées dans un dossier « Copies de sécurité », à côté du
+  classeur, sous un nom lisible (« Suivi - copie du 30-10-2026 12h15.xlsx »), pour ne plus se
+  confondre avec le classeur. Les copies déjà créées restent où elles sont.
 
 ### Corrigé
 

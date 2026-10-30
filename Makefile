@@ -43,7 +43,7 @@ build: ## Construit l'image Docker
 
 gen: build ## Génère les classeurs d'exemple dans exemples/
 	@mkdir -p $(EXEMPLES)
-	@rm -f $(EXEMPLES)/*.xlsx   # repart à neuf : pas de .bak d'exemples accumulés
+	@rm -f $(EXEMPLES)/*.xlsx   # repart à neuf : pas de copies de sécurité d'exemples
 	$(COMPOSE) run --rm $(USERFLAG) suivi configs/exemple.yaml $(EXEMPLES)
 	$(COMPOSE) run --rm $(USERFLAG) suivi configs/minimal.yaml $(EXEMPLES)
 

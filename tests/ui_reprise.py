@@ -60,9 +60,10 @@ def main() -> int:
     # --- Compte rendu après génération ---
     R, E = moteur.RapportGeneration, moteur.Ecartee
     s = tmp / "Suivi.xlsx"
-    bak = tmp / "Suivi.bak-20261029-182951.xlsx"
-    copie = ("info", "Copie de sécurité de l'ancien fichier : "
-                     "« Suivi.bak-20261029-182951.xlsx ».")
+    # Copie rangée dans « Copies de sécurité » : le compte rendu dit dans quel dossier.
+    bak = tmp / moteur.DOSSIER_COPIES / "Suivi - copie du 29-10-2026 18h29.xlsx"
+    copie = ("info", "Copie de sécurité de l'ancien fichier : « Suivi - copie du "
+                     "29-10-2026 18h29.xlsx » (dossier « Copies de sécurité »).")
     # Classeur neuf.
     assert ui._lignes_rapport(R(), s) == [
         ("info", "Nouveau classeur : aucune saisie à reprendre.")]
@@ -87,8 +88,8 @@ def main() -> int:
                    "(renommé ou supprimé)."),
         ("alerte", "Non repris : Charges réelles, 1 année — onglet Régularisation "
                    "désactivé."),
-        ("alerte", "Ces saisies restent dans « Suivi.bak-20261029-182951.xlsx » : rien "
-                   "n'est perdu.")], lignes
+        ("alerte", "Ces saisies restent dans « Suivi - copie du 29-10-2026 18h29.xlsx » "
+                   "(dossier « Copies de sécurité ») : rien n'est perdu.")], lignes
     # Écartées d'un autre classeur : elles restent dans ce classeur-là (jamais modifié).
     lignes = ui._lignes_rapport(R(source=old, ecartees=[
         E("Ana", "mois hors de la période ou des dates du locataire", 1, "mois")]), s)

@@ -150,13 +150,14 @@ def main(page):
             threading.Timer(4, lambda: print(
                 "MEMO", gui._classeur_memorise(app._reglages, app._slug(app._cfg_valide)),
                 "| JSON", neuf.with_suffix(".json").is_file(),
-                "| VIEUX INTACT", not list(tmp.glob("*.bak-*")),
+                "| VIEUX INTACT", not list((tmp / moteur.DOSSIER_COPIES).glob("*")),
                 "| MOIS", moteur.compter_mois_saisis(neuf), flush=True)).start()
         threading.Timer(3.5, lancer).start()
     if STATE in ("rapport", "rapport_ecarts"):
         import threading
         import generer_suivi_loyers as moteur
-        bak = ancien.with_name(ancien.stem + ".bak-20261029-182951.xlsx")
+        bak = (ancien.parent / moteur.DOSSIER_COPIES
+               / f"{ancien.stem} - copie du 29-10-2026 18h29.xlsx")
         rapport = moteur.RapportGeneration(source=ancien, sauvegarde=bak, mois_repris=48)
         if STATE == "rapport_ecarts":
             rapport.ecartees = [moteur.Ecartee(

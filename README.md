@@ -31,9 +31,12 @@ bailleur et le propose d'office. En le remplaçant, il :
 
 1. reprend automatiquement tout ce que vous aviez saisi : les montants reçus et les dates
    de chaque mois, les charges réelles de la régularisation et les indices IRL ;
-2. garde une copie de l'ancien fichier à côté du nouveau, nommée
-   `<nom du classeur>.bak-<date et heure>.xlsx`. En cas de doute, cette copie contient
-   exactement ce que vous aviez avant. Si elle ne peut pas être créée, rien n'est remplacé.
+2. garde une copie de l'ancien fichier dans le dossier **Copies de sécurité**, à côté du
+   classeur, nommée `<nom du classeur> - copie du <date> <heure>.xlsx`. En cas de doute,
+   cette copie contient exactement ce que vous aviez avant ; n'y saisissez rien, car ce
+   n'est pas elle qui est reprise. Si elle ne peut pas être créée, rien n'est remplacé. Les
+   copies faites avant la version 1.3.0 (`<nom du classeur>.bak-<date et heure>.xlsx`) sont
+   restées à côté du classeur.
 
 Si vous choisissez un autre fichier (un nouveau nom, ou un fichier sans saisies), le
 logiciel demande d'abord d'où reprendre les saisies. Le classeur d'origine n'est jamais
