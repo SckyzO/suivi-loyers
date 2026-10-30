@@ -11,7 +11,9 @@ import json
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import interface_flet as ui
 
@@ -111,6 +113,28 @@ def main() -> int:
         ui._libelles_session(liste[0])
     assert ui._libelles_session({"config": {"bailleur": {}, "locataires": []}}) == \
         ("Bailleur sans nom — 0 locataire", "")
+
+    # --- Mettre la saisie de côté avant de la remplacer (chargement, reprise) ---
+    def app(autosave: bool, en_cours):
+        faux = SimpleNamespace(_autosave_actif=autosave, _verrou_session=threading.Lock(),
+                               _session_ecrite=("x", False),
+                               _modifs_non_enregistrees=lambda: en_cours)
+        faux._sauver_session = lambda: autosave and ui._enregistrer_session(cfg, False)
+        return faux
+    os.environ["APPDATA"] = tempfile.mkdtemp()
+    faux = app(True, cfg)
+    assert ui.AppLoyers._mettre_session_de_cote(faux) is None
+    assert len(list(ui._dossier_mises_de_cote().glob("*.json"))) == 1
+    assert faux._session_ecrite is None                  # la suite repart d'un fichier neuf
+    # Sauvegarde automatique suspendue (mise de côté ratée au démarrage) : la saisie en
+    # cours n'est dans aucun fichier, la remplacer la perdrait. Refusé, rien ne bouge.
+    os.environ["APPDATA"] = tempfile.mkdtemp()
+    assert isinstance(ui.AppLoyers._mettre_session_de_cote(app(False, cfg)), OSError)
+    assert not list(ui._dossier_mises_de_cote().glob("*.json"))
+    # Au démarrage (formulaire encore vierge), c'est la session précédente qui part.
+    ui._enregistrer_session(cfg, propre=False)
+    assert ui.AppLoyers._mettre_session_de_cote(app(False, None)) is None
+    assert len(list(ui._dossier_mises_de_cote().glob("*.json"))) == 1
 
     # --- Réglages (dont le dernier classeur de chaque bailleur) : écriture atomique ---
     os.environ["APPDATA"] = tempfile.mkdtemp()

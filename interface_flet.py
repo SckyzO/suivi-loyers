@@ -1023,6 +1023,10 @@ class AppLoyers:
         perdre des dernières secondes. Renvoie l'erreur si c'est impossible : l'appelant
         prévient et ne remplace alors rien."""
         self._sauver_session()
+        if not self._autosave_actif and self._modifs_non_enregistrees() is not None:
+            # Sauvegarde suspendue (mise de côté ratée au démarrage) : la saisie en cours
+            # n'est dans aucun fichier, la remplacer la perdrait.
+            return OSError("la sauvegarde automatique est suspendue")
         with self._verrou_session:
             try:
                 _archiver_session()
