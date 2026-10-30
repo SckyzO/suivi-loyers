@@ -33,10 +33,10 @@ bailleur et le propose d'office. En le remplaçant, il :
    de chaque mois, les charges réelles de la régularisation et les indices IRL ;
 2. garde une copie de l'ancien fichier dans le dossier **Copies de sécurité**, à côté du
    classeur, nommée `<nom du classeur> - copie du <date> <heure>.xlsx`. En cas de doute,
-   cette copie contient exactement ce que vous aviez avant ; n'y saisissez rien, car ce
-   n'est pas elle qui est reprise. Si elle ne peut pas être créée, rien n'est remplacé. Les
-   copies faites avant la version 1.3.0 (`<nom du classeur>.bak-<date et heure>.xlsx`) sont
-   restées à côté du classeur.
+   cette copie contient exactement ce que vous aviez avant. N'y saisissez rien : à la mise à
+   jour suivante, le logiciel relit le classeur, pas ses copies. Si la copie ne peut pas
+   être créée, rien n'est remplacé. Les copies faites avant la version 1.3.0
+   (`<nom du classeur>.bak-<date et heure>.xlsx`) sont restées à côté du classeur.
 
 Si vous choisissez un autre fichier (un nouveau nom, ou un fichier sans saisies), le
 logiciel demande d'abord d'où reprendre les saisies. Le classeur d'origine n'est jamais
@@ -93,7 +93,8 @@ pour l'enregistrer ailleurs.
 - Les montants et la *date d'entrée*. Les mois d'entrée et de sortie incomplets sont
   calculés au prorata des jours.
 - *Le locataire est parti* : active la *date de sortie*, *Caution rendue* et le *motif de
-  départ* (fin de bail, loyer impayé, travaux…, ou un texte libre).
+  départ*, à choisir dans une liste (fin de bail, congé du locataire ou du bailleur, loyer
+  impayé, travaux…).
 - Avec l'option *Documents*, trois champs repris sur les courriers : *Date du bail*, *Mode de
   paiement* et *Jour d'échéance*.
 
@@ -110,15 +111,15 @@ dans le classeur. Pour un locataire qui part, indiquez plutôt une date de sorti
 Un nom, un bien, une adresse ou une période trop longs pour leur colonne s'affichent en
 entier au survol de la souris. Dans une fenêtre étroite, la liste masque les colonnes les
 moins utiles (Adresse, puis CAF, Période et Bien) pour garder le nom, le loyer et l'état
-lisibles, et la recherche passe sous le titre avec l'interrupteur et le bouton **Ajouter**.
-Agrandissez la fenêtre pour retrouver les colonnes.
+lisibles ; la recherche passe alors sous le titre, avec l'interrupteur et le bouton
+**Ajouter**. Agrandissez la fenêtre pour retrouver les colonnes.
 
 ### Changer de locataire
 
-Les rotations de locataires sont prévues. Pour un logement qui change d'occupant, mettez une
-date de sortie à l'ancien et ajoutez le nouveau avec sa date d'entrée. Chacun
-n'apparaît dans le suivi que sur ses mois de présence. Régénérez ensuite par-dessus le même
-classeur : vos saisies sont reprises (voir plus haut).
+Quand un logement change d'occupant, mettez une date de sortie à l'ancien locataire et
+ajoutez le nouveau avec sa date d'entrée : chacun n'apparaît dans le suivi que sur ses mois
+de présence. Régénérez ensuite par-dessus le même classeur, vos saisies sont reprises (voir
+plus haut).
 
 ## Le classeur produit
 
@@ -148,8 +149,8 @@ modifiez pas les cases bleutées. Un total est ajouté à la fin de chaque anné
 ### Imprimer un document
 
 Dans les onglets **Quittance**, **Avis d'échéance**, **Lettre de relance** et **Mise en
-demeure**, choisissez le locataire, le mois et l'année : le document se remplit et
-s'imprime. Si le loyer du mois n'est pas entièrement payé, la quittance devient
+demeure**, choisissez le locataire, le mois et l'année : le document se remplit, prêt à
+imprimer. Si le loyer du mois n'est pas entièrement payé, la quittance devient
 automatiquement un reçu de paiement partiel (article 21 de la loi du 6 juillet 1989). La
 relance et la mise en demeure indiquent le reste dû cumulé du locataire.
 
@@ -172,8 +173,8 @@ qu'un indice manque, le loyer de la fiche s'applique sans révision.
 
 ## Apparence
 
-Les **Réglages** choisissent le thème de l'application (système, clair ou sombre) et
-l'apparence du classeur : thème de couleurs et police.
+Dans les **Réglages**, vous choisissez le thème de l'application (système, clair ou sombre)
+et l'apparence du classeur : thème de couleurs et police.
 
 | Thème sombre | Réglages |
 |---|---|
