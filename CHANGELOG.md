@@ -6,6 +6,11 @@ Les changements notables de chaque version. Le format suit
 
 ## [Non publié]
 
+### Corrigé
+
+- Le mode d'emploi intégré laissait entendre que changer le nom d'un locataire demandait une
+  confirmation : seule la suppression en demande une.
+
 ## [1.3.0] - 2026-10-30
 
 ### Ajouté

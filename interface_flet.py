@@ -559,9 +559,9 @@ AIDE = [
     ], True),
     ("Copies de sécurité", ft.Icons.SHIELD_OUTLINED, [
         "À chaque mise à jour, l'ancien classeur est copié dans le dossier « Copies de "
-        "sécurité », à côté du classeur, sous le nom « nom du classeur - copie du date "
-        "heure.xlsx ». Le logiciel ne supprime jamais ces copies. Celles des versions "
-        "précédentes (« .bak ») sont restées à côté du classeur.",
+        "sécurité », à côté du classeur, sous un nom comme « Suivi - copie du 30-10-2026 "
+        "12h15.xlsx ». Le logiciel ne supprime jamais ces copies. Celles des versions "
+        "précédentes, en « .bak », sont restées à côté du classeur.",
         "Ne saisissez rien dans une copie : ce qui y est tapé n'est pas repris dans le "
         "classeur. Pour revenir en arrière, ouvrez la copie dans Excel et enregistrez-la à "
         "la place du classeur (Fichier > Enregistrer sous, dans le dossier du classeur).",
@@ -573,10 +573,10 @@ AIDE = [
     ("Départ, renommage ou suppression d'un locataire", ft.Icons.PERSON_REMOVE_OUTLINED, [
         "Quand un locataire part, activez « Le locataire est parti » et indiquez sa date de "
         "sortie : son historique reste dans le classeur.",
-        "Les saisies sont rattachées au nom et au prénom. Si vous renommez ou supprimez un "
-        "locataire (le logiciel demande confirmation), ses anciennes saisies ne sont pas "
-        "reportées : le logiciel vous le signale après la génération, et elles restent dans "
-        "la copie de sécurité.",
+        "Les saisies sont rattachées au nom et au prénom. Si vous changez le nom d'un "
+        "locataire ou le supprimez (le logiciel demande alors confirmation), ses anciennes "
+        "saisies ne sont pas reportées : le logiciel vous le signale après la génération, et "
+        "elles restent dans la copie de sécurité.",
     ], False),
 ]
 
