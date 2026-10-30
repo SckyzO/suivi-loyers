@@ -340,7 +340,8 @@ def _lignes_rapport(rapport: moteur.RapportGeneration, sortie: Path) -> list[tup
 # Bailleur, locataires et options n'existaient qu'en mémoire jusqu'à « Enregistrer
 # config » ou une génération : fermer le logiciel les perdait. L'état est recopié en
 # continu ; au démarrage, une saisie qui n'avait pas été enregistrée est proposée à la
-# reprise. Une session écartée est mise de côté (session-ecartee.json), jamais effacée.
+# reprise. Une session écartée est mise de côté (saisies-mises-de-cote/, un fichier daté
+# par saisie), jamais effacée ni écrasée.
 
 def _fichier_session() -> Path:
     return _fichier_reglages().with_name("session.json")
@@ -381,12 +382,26 @@ def _enregistrer_session(cfg: dict, propre: bool) -> None:
         pass  # best-effort : retentée au cycle suivant, ne bloque jamais le logiciel
 
 
-def _archiver_session() -> None:
-    """Met la session de côté (session-ecartee.json) au lieu de la laisser écraser."""
-    try:
-        os.replace(_fichier_session(), _fichier_session().with_name("session-ecartee.json"))
-    except OSError:
-        pass  # pas de session : rien à mettre de côté
+def _dossier_mises_de_cote() -> Path:
+    return _fichier_reglages().with_name("saisies-mises-de-cote")
+
+
+def _archiver_session() -> Path | None:
+    """Met la session de côté dans un fichier daté, jamais écrasé : chaque saisie écartée
+    reste récupérable (elles partageaient un seul fichier, écrasé à chaque fois). None s'il
+    n'y a pas de session ; OSError si le déplacement échoue, et l'appelant ne doit alors
+    pas laisser écraser la session."""
+    source = _fichier_session()
+    if not source.is_file():
+        return None
+    dossier = _dossier_mises_de_cote()
+    dossier.mkdir(parents=True, exist_ok=True)
+    base = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    cible, n = dossier / f"{base}.json", 2
+    while cible.exists():                   # deux mises de côté dans la même seconde
+        cible, n = dossier / f"{base}-{n}.json", n + 1
+    os.replace(source, cible)
+    return cible
 
 
 def _session_a_reprendre(session: dict) -> dict | None:
@@ -954,34 +969,53 @@ class AppLoyers:
             return cfg
         return None
 
-    def _mettre_session_de_cote(self):
-        _archiver_session()
+    def _mettre_session_de_cote(self) -> OSError | None:
+        """Met la saisie de côté (cf. _archiver_session), écrite juste avant pour ne rien
+        perdre des dernières secondes. Renvoie l'erreur si c'est impossible : l'appelant
+        prévient et ne remplace alors rien."""
+        self._sauver_session()
         with self._verrou_session:
+            try:
+                _archiver_session()
+            except OSError as exc:
+                return exc
             self._session_ecrite = None    # la prochaine écriture repart d'un fichier neuf
+        return None
 
     def _proposer_session(self, session: dict):
         """Le logiciel a été fermé sur une saisie non enregistrée : proposer de la
         reprendre. La sauvegarde automatique démarre après la réponse (elle écraserait
         sinon cette session par le formulaire vierge)."""
+        def mettre_de_cote() -> bool:
+            erreur = self._mettre_session_de_cote()
+            if erreur:
+                # Sans copie, la sauvegarde automatique effacerait cette saisie : suspendue.
+                self._alerte("Saisie non mise de côté",
+                             f"La saisie précédente n'a pas pu être mise de côté ({erreur}). "
+                             "Elle vous sera de nouveau proposée au prochain démarrage ; "
+                             "d'ici là, la sauvegarde automatique est suspendue.")
+                return False
+            self._demarrer_autosave()
+            return True
+
         def reprendre(_):
             self.page.pop_dialog()
             try:
                 cfg, _avertis = moteur.migrer_config(session["config"])
             except Exception as exc:  # noqa: BLE001 — session abîmée : mise de côté
-                _archiver_session()
-                self._alerte("Reprise impossible",
-                             f"La saisie précédente est illisible ({exc}). Elle a été mise "
-                             "de côté.")
-            else:
-                self._peupler_depuis(cfg)   # reste « non enregistrée » jusqu'au .json
-                self._toast("Saisie reprise. Pensez à générer le classeur ou à "
-                            "enregistrer la configuration.")
+                if mettre_de_cote():
+                    self._alerte("Reprise impossible",
+                                 f"La saisie précédente est illisible ({exc}). Elle a été "
+                                 "mise de côté.")
+                return
+            self._peupler_depuis(cfg)   # reste « non enregistrée » jusqu'au .json
+            self._toast("Saisie reprise. Pensez à générer le classeur ou à "
+                        "enregistrer la configuration.")
             self._demarrer_autosave()
 
         def ignorer(_):
             self.page.pop_dialog()
-            _archiver_session()
-            self._demarrer_autosave()
+            mettre_de_cote()
 
         self._dialogue(
             "Reprendre votre saisie ?",
@@ -1322,8 +1356,14 @@ class AppLoyers:
 
         async def charger_quand_meme(_):
             self.page.pop_dialog()
-            # La saisie remplacée reste récupérable (session-ecartee.json).
-            self._mettre_session_de_cote()
+            # La saisie remplacée reste récupérable (saisies-mises-de-cote/).
+            erreur = self._mettre_session_de_cote()
+            if erreur:
+                self._alerte("Chargement annulé",
+                             f"Votre saisie n'a pas pu être mise de côté ({erreur}). "
+                             "Enregistrez-la avec « Enregistrer config » avant de charger "
+                             "une autre configuration.")
+                return
             await self._choisir_config()
 
         self._dialogue(

@@ -75,8 +75,10 @@ atomique) toutes les 3 s et après chaque `_rafraichir_table`, avec un drapeau `
 `_marquer_propre(cfg)`, sinon le prochain lancement proposerait à tort une reprise. Au
 démarrage, seule une session non propre et non vide est proposée (sinon formulaire vierge,
 comme avant) ; la sauvegarde automatique ne démarre qu'après la réponse. Une session écartée
-(refusée, ou remplacée par un chargement confirmé) part dans `session-ecartee.json`, jamais
-supprimée. Supprimer un locataire passe par `_demander_suppression` (confirmation). Règles
+(refusée, ou remplacée par un chargement confirmé) part dans `saisies-mises-de-cote/`, un
+fichier daté par saisie (`_archiver_session`), jamais supprimé ni écrasé ; si ce déplacement
+échoue, rien n'est remplacé et la sauvegarde automatique ne démarre pas (elle effacerait la
+session). Supprimer un locataire passe par `_demander_suppression` (confirmation). Règles
 pures testées par `tests/ui_protection.py`.
 
 ## Onglets du classeur

@@ -6,6 +6,7 @@ saisie en cours (session.json) et sa reprise au démarrage. Importer `interface_
 demande Flet, mais aucune fenêtre n'est ouverte.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -63,9 +64,15 @@ def main() -> int:
     assert relu["config"] == cfg and relu["propre"] is False and relu["horodatage"], relu
     assert sorted(p.name for p in dossier.iterdir()) == ["session.json"], \
         "écriture atomique : aucun fichier temporaire ne doit rester"
-    ui._archiver_session()                               # session écartée : mise de côté
-    assert ui._charger_session() == {}
-    assert (dossier / "session-ecartee.json").is_file()
+    # Session écartée : mise de côté dans son propre fichier. Une deuxième ne doit pas
+    # effacer la première (elles partageaient session-ecartee.json, écrasé à chaque fois).
+    premiere = ui._archiver_session()
+    assert ui._charger_session() == {} and premiere and premiere.is_file(), premiere
+    ui._enregistrer_session({"bailleur": {"nom": "Dupont"}, "locataires": []}, propre=False)
+    seconde = ui._archiver_session()                     # même seconde : nom distinct
+    assert seconde and seconde != premiere and seconde.is_file(), (premiere, seconde)
+    assert json.loads(premiere.read_text(encoding="utf-8"))["config"] == cfg
+    assert ui._archiver_session() is None                # plus de session : rien à faire
     (dossier / "session.json").write_text("{ illisible", encoding="utf-8")
     assert ui._charger_session() == {}                   # corrompue : ignorée, pas d'erreur
 
