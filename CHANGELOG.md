@@ -6,6 +6,8 @@ Les changements notables de chaque version. Le format suit
 
 ## [Non publié]
 
+## [1.3.0] - 2026-10-30
+
 ### Ajouté
 
 - Ce qui est saisi dans le logiciel (bailleur, locataires, options) est sauvegardé en continu.
@@ -129,7 +131,8 @@ Première version publiée : interface graphique et classeur Excel par bailleur,
 feuille de saisie par locataire, bilan, tableau de bord, régularisation des charges, révision
 IRL et documents à imprimer (quittance, avis d'échéance, lettre de relance, mise en demeure).
 
-[Non publié]: https://github.com/SckyzO/suivi-loyers/compare/v1.2.1...HEAD
+[Non publié]: https://github.com/SckyzO/suivi-loyers/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/SckyzO/suivi-loyers/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/SckyzO/suivi-loyers/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/SckyzO/suivi-loyers/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/SckyzO/suivi-loyers/compare/v1.0.0...v1.1.0
