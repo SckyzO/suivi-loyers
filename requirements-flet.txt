@@ -5,4 +5,4 @@
 # (PyInstaller) reste disponible, la chaîne de build est inchangée.
 flet==1.0.5
 openpyxl==3.1.5
-PyYAML==6.0.3
+PyYAML==6.0.4
